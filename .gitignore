@@ -1,0 +1,8 @@
+# build outputs
+dist/
+app/.build/
+spike/usbipd/usbipd
+spike/vzrun/vzrun
+.DS_Store
+__pycache__/
+*.pyc

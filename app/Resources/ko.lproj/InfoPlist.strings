@@ -1,0 +1,2 @@
+/* The app's own strings are written in Korean in the source; this file only covers Info.plist. */
+"NSLocalNetworkUsageDescription" = "앱이 띄운 VM 안의 Wi-Fi 제어 API에 접속해요.";
