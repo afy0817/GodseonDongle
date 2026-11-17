@@ -1,5 +1,7 @@
 # GodseonDongle
 
+[![build](https://github.com/afy0817/GodseonDongle/actions/workflows/build.yml/badge.svg)](https://github.com/afy0817/GodseonDongle/actions/workflows/build.yml)
+
 GodseonDongle is a macOS app that keeps the Mac's built-in Wi-Fi as it is and joins a second
 Wi-Fi network at the same time through a USB Wi-Fi dongle — handy for equipment or lab networks
 that have no internet. A small root helper captures the dongle and hands it over USB/IP to a tiny
@@ -52,6 +54,12 @@ GODSEON_REBUILD_VM=1 ./app/build_app.sh
 ```
 
 결과물은 `dist/GodseonDongle.app`(약 58MB)이고, `--install`을 붙이면 `/Applications`에 복사해요.
+
+GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))도 같은 앱을 빌드해요. VM 이미지는 리눅스 arm64 러너의 Docker에서, 앱은 맥 러너에서 만들고, 실행마다 zip을 아티팩트로 남겨요. `v`로 시작하는 태그(예: `v0.1.0`)를 올리면 Release에 zip이 붙어요. 내려받은 앱은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. Finder에서 오른쪽 클릭 → **열기**를 누르거나 아래 명령을 실행해요.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
+```
 
 새로 빌드한 앱은 ad-hoc 서명이 바뀌어서, 처음 저장된 Wi-Fi에 붙을 때 macOS가 키체인의 비밀번호를 이 앱에 줘도 되는지 한 번 물어요. **항상 허용**을 누르면 돼요.
 
