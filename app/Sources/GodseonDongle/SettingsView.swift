@@ -10,26 +10,21 @@ struct SettingsView: View {
     @State private var dongleText = ""
     @State private var countryText = ""
     @State private var routesText = ""
-    @State private var rxFilterOn = true
     @State private var confirmUninstall = false
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    TextField("USB ID", text: $dongleText, prompt: Text("0bda:b812"))
-                    Text(t("vendor:product 형식이에요. RTL8812BU 동글은 0bda:b812예요."))
+                    Text(t("동글과 폰은 왼쪽 장치 목록에서 장치마다 켜고 꺼요. 동글의 Trigger 프레임 거르기와 폰의 맥 인터넷도 거기서 정해요."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Toggle(t("Wi-Fi 6 Trigger 프레임 거르기"), isOn: $rxFilterOn)
-                        .disabled(!filterApplies)
-                    Text(filterApplies
-                         ? t("주변 Wi-Fi 6 공유기가 보내는 Trigger 프레임은 이 동글이 쓰지 못하는데도 USB로 계속 올라와요. 도우미가 VM에 넘기지 않고 걸러서 CPU를 덜 써요.")
-                         : t("Realtek RTL8812BU·8822BU·8811CU·8821CU·8812CU·8822CU 동글(Linux rtw88 드라이버)에만 쓸 수 있어요."))
+                    TextField(t("목록에 없는 동글"), text: $dongleText, prompt: Text("0bda:b812"))
+                    Text(t("VM의 드라이버 목록에 없는 USB ID라도 동글로 보여 줘요. vendor:product 형식이고, 비워 둬도 돼요."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {
-                    Text(t("동글"))
+                    Text(t("장치"))
                 }
 
                 Section {
@@ -110,12 +105,11 @@ struct SettingsView: View {
             dongleText = model.dongleID
             countryText = model.country
             routesText = model.extraRoutesText
-            rxFilterOn = model.rxFilter
         }
         .confirmationDialog(t("도우미를 지울까요?"), isPresented: $confirmUninstall) {
             Button(t("도우미 제거"), role: .destructive) { Task { await model.uninstallHelper() } }
         } message: {
-            Text(t("동글을 macOS에 돌려주고 맥 경로를 지워요. 다시 쓰려면 다시 설치해야 해요. macOS가 관리자 암호를 물어요."))
+            Text(t("동글과 폰을 macOS에 돌려주고 맥 경로를 지워요. 다시 쓰려면 다시 설치해야 해요. macOS가 관리자 암호를 물어요."))
         }
     }
 
@@ -125,10 +119,10 @@ struct SettingsView: View {
         return model.helperStatus == nil ? t("설치됨 · 응답 없음") : t("설치됨 · 실행 중")
     }
 
-    private var filterApplies: Bool { normalizedDongle.map(USBDevice.rtw88IDs.contains) ?? false }
-
+    /// "" for an empty field; nil when it holds something other than vendor:product.
     private var normalizedDongle: String? {
         let text = dongleText.trimmingCharacters(in: .whitespaces).lowercased()
+        if text.isEmpty { return "" }
         let parts = text.split(separator: ":")
         guard parts.count == 2, parts.allSatisfy({ $0.count == 4 && $0.allSatisfy(\.isHexDigit) }) else { return nil }
         return text
@@ -149,7 +143,6 @@ struct SettingsView: View {
         if model.country != country { model.country = country }
         let routes = (IPv4.parseCIDRList(routesText) ?? []).joined(separator: ", ")
         if model.extraRoutesText != routes { model.extraRoutesText = routes }
-        if model.rxFilter != rxFilterOn { model.rxFilter = rxFilterOn }
         dismiss()
     }
 

@@ -5,10 +5,21 @@
 # Builds dist/vm_assets/{Image-lts,initramfs-thrurndis-wifi} in an Alpine aarch64
 # container (Docker Desktop on Apple Silicon runs it natively).
 #   ./vm/build.sh [output-dir]
+#   ./vm/build.sh --sources-hash     prints the hash of vm/ that the image's manifest keeps
 
 set -eu
 
 VM_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
+# Every file under vm/; app/build_app.sh rebuilds an image whose manifest has another hash.
+sources_hash() {
+    (cd "$VM_DIR" && find . -type f ! -path '*/__pycache__/*' ! -name '.*' | LC_ALL=C sort |
+        xargs shasum -a 256) | shasum -a 256 | cut -c1-16
+}
+if [ "${1:-}" = --sources-hash ]; then
+    sources_hash
+    exit 0
+fi
 OUT=${1:-$VM_DIR/../dist/vm_assets}
 ALPINE_IMAGE=${ALPINE_IMAGE:-alpine:edge}
 VERSION=${THRURNDIS_WIFI_VERSION:-$(date +%Y%m%d.%H%M)}
@@ -36,6 +47,7 @@ CACHE=$(CDPATH='' cd -- "$CACHE" && pwd)
 docker run --rm --platform linux/arm64 \
     -v "$VM_DIR:/src:ro" -v "$OUT:/out" -v "$CACHE:/cache" thrurndis-wifi-builder \
     python3 /src/builder/build_assets.py --src /src --out /out --cache /cache --version "$VERSION" \
+    --sources "$(sources_hash)" \
     ${GODSEON_RTW88_PATCHES:+$( [ "$GODSEON_RTW88_PATCHES" = 0 ] && echo --no-kernel-patches)}
 
 echo "VM assets: $OUT"

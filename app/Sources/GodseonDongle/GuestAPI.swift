@@ -43,6 +43,15 @@ struct GuestAPI {
         var usb_tx_stall: Bool?
         /// "l1" / "l2" while the VM resets the dongle, "failed" when only a VM restart is left.
         var usb_recover: String?
+        /// usb0, a phone's USB tethering (nil from images before it): present, its DHCP lease,
+        /// and whether the guest's gateway for it (policy route, NAT, DNS proxy) is up.
+        var tether: Bool?
+        var tether_ipv4: String?
+        var tether_prefix: Int?
+        var tether_gateway: String?
+        var tether_dns: String?
+        var tether_ready: Bool?
+        var tether_usb_id: String?
 
         var ssid: String { Hex.decodeSSID(ssid_hex) }
         var configuredSSID: String { Hex.decodeSSID(configured_ssid_hex) }

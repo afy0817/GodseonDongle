@@ -21,6 +21,17 @@
 # gateway of eth0's lease) instead of ThruRNDIS's 192.168.100.2 host link, so the policy rule,
 # forward allowlist and masquerade key on that address. THRURNDIS_HOST_LINK_HOST_IPV4 sets it
 # explicitly; without either, 192.168.100.2 stays.
+# GodseonDongle change: wlan0 (the Wi-Fi dongle) and usb0 (a phone's USB tethering) each run
+# an instance of this script at the same time (uplink-watcher). The Mac tells them apart by the
+# source address: its routes to the dongle's networks leave from the bridge address, its
+# internet through the phone from the host link 10.94.8.2 (GODSEON_HOST_LINK_GUEST_CIDR is the
+# guest's end, 10.94.8.1/30 on eth0). Each instance has its own table, rule priority and nft
+# table (THRURNDIS_RNDIS_ROUTE_TABLE, THRURNDIS_RNDIS_ROUTE_PRIORITY, THRURNDIS_NFT_TABLE), and
+# only the last one down turns IPv4 forwarding off, as the other one may still need it.
+# GodseonDongle change: GODSEON_UPLINK_MTU (uplink-watcher sets 1400 for usb0) lowers the uplink's
+# MTU and clamps the MSS of TCP connections through it. A phone's mobile network can carry less
+# than 1500-byte packets and send no "fragmentation needed" back, so without this large uploads
+# stall while small requests and downloads work.
 
 BB=/usr/bin/busybox
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
@@ -38,15 +49,21 @@ NFT_TABLE=${THRURNDIS_NFT_TABLE:-thrurndis}
 RNDIS_RESOLV_CONF=${THRURNDIS_RNDIS_RESOLV_CONF:-/etc/resolv.conf}
 ALLOW_SUBNET_ONLY=${THRURNDIS_RNDIS_ALLOW_SUBNET_ONLY:-0}
 HOLD_ROUTE_READY=${THRURNDIS_RNDIS_HOLD_ROUTE_READY:-0}
-ROUTE_READY_MARK=/run/thrurndis-route-ready-announced
-HOST_LINK_GUEST_IPV4=192.168.100.1
-HOST_LINK_GUEST_CIDR=192.168.100.1/24
+ROUTE_READY_MARK=/run/thrurndis-route-ready-announced-$RNDIS_IFACE
+HOST_LINK_GUEST_CIDR=${GODSEON_HOST_LINK_GUEST_CIDR:-10.94.8.1/30}
+HOST_LINK_GUEST_IPV4=${HOST_LINK_GUEST_CIDR%%/*}
 HOST_LINK_HOST_IPV4=${THRURNDIS_HOST_LINK_HOST_IPV4:-}
 if [ -z "$HOST_LINK_HOST_IPV4" ]; then
     HOST_LINK_HOST_IPV4=$(ip -4 route show default dev "$INGRESS_IFACE" 2>/dev/null |
         $BB awk '$2 == "via" { print $3; exit }')
 fi
 HOST_LINK_HOST_IPV4=${HOST_LINK_HOST_IPV4:-192.168.100.2}
+UPLINK_MTU=${GODSEON_UPLINK_MTU:-}
+case "$UPLINK_MTU" in
+    ''|*[!0-9]*) UPLINK_MTU="" ;;
+esac
+UPLINK_MSS=""
+[ -n "$UPLINK_MTU" ] && UPLINK_MSS=$((UPLINK_MTU - 40))
 HOST_LINK_HOST_CIDR=$HOST_LINK_HOST_IPV4/32
 PORT_FORWARDING_MODULE=/usr/local/libexec/thrurndis/port-forwarding
 
@@ -337,6 +354,10 @@ ensure_rndis_gateway() {
     fi
 
     ip link set dev "$iface" up 2>/dev/null || $BB ifconfig "$iface" up 2>/dev/null || true
+    if [ -n "$UPLINK_MTU" ]; then
+        ip link set dev "$iface" mtu "$UPLINK_MTU" 2>/dev/null ||
+            log_console "could not set the MTU of $iface to $UPLINK_MTU"
+    fi
 
     ipv4=$(interface_ipv4_address "$iface" || true)
     gateway=$(interface_default_gateway "$iface")
@@ -506,6 +527,12 @@ install_nftables() {
         ip saddr $HOST_LINK_HOST_CIDR iifname \"$INGRESS_IFACE\" ip daddr $HOST_LINK_GUEST_IPV4 tcp dport 53 dnat to $rndis_dns"
     fi
 
+    mss_rules=""
+    if [ -n "$UPLINK_MSS" ]; then
+        mss_rules="oifname \"$RNDIS_IFACE\" tcp flags syn tcp option maxseg size > $UPLINK_MSS tcp option maxseg size set $UPLINK_MSS
+        iifname \"$RNDIS_IFACE\" tcp flags syn tcp option maxseg size > $UPLINK_MSS tcp option maxseg size set $UPLINK_MSS"
+    fi
+
     if ! thrurndis_pf_prepare_nft_rules; then
         log_console "refusing to install nftables with invalid port forwarding boot configuration"
         thrurndis_pf_announce_error_state invalid-state || true
@@ -533,11 +560,18 @@ table ip $NFT_TABLE {
         $dns_proxy_rules
     }
 
+    # GodseonDongle change: policy accept, and drops for whatever else touches this uplink.
+    # A packet must pass every forward base chain, and the other uplink's instance has one too:
+    # with policy drop in both, each would drop the other's traffic.
     chain forward {
-        type filter hook forward priority 0; policy drop;
+        type filter hook forward priority 0; policy accept;
+        $mss_rules
         $THRURNDIS_PF_FORWARD_RULES
         ip saddr $HOST_LINK_HOST_CIDR iifname "$INGRESS_IFACE" oifname "$RNDIS_IFACE" accept
         ip daddr $HOST_LINK_HOST_CIDR iifname "$RNDIS_IFACE" oifname "$INGRESS_IFACE" ct state established,related accept
+        iifname "$RNDIS_IFACE" drop
+        oifname "$RNDIS_IFACE" drop
+        iifname "$INGRESS_IFACE" oifname "$INGRESS_IFACE" drop
     }
 
     chain postrouting {
@@ -575,12 +609,15 @@ clear_gateway_state() {
     ip route flush table "$TABLE_ID" 2>/dev/null || true
     ip route flush cache 2>/dev/null || true
 
-    if [ -w /proc/sys/net/ipv4/ip_forward ]; then
-        echo 0 >/proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-    fi
-
     if command -v nft >/dev/null 2>&1; then
         nft delete table ip "$NFT_TABLE" 2>/dev/null || true
+    fi
+
+    # Forwarding goes off only with the last instance (see the header): its forward chain is
+    # what keeps anything other than the Mac's own traffic out of an uplink.
+    if [ -w /proc/sys/net/ipv4/ip_forward ] &&
+        ! nft list tables ip 2>/dev/null | $BB grep -q '^table ip thrurndis'; then
+        echo 0 >/proc/sys/net/ipv4/ip_forward 2>/dev/null || true
     fi
 }
 
@@ -773,6 +810,15 @@ gateway_status() {
         if ! thrurndis_pf_rules_ready; then
             missing=1
         fi
+        if [ -n "$UPLINK_MSS" ] && ! nft list chain ip "$NFT_TABLE" forward 2>/dev/null |
+            $BB grep -F "maxseg size set $UPLINK_MSS" >/dev/null 2>&1; then
+            echo "missing TCP MSS clamp to $UPLINK_MSS on $RNDIS_IFACE"
+            missing=1
+        fi
+    fi
+    if [ -n "$UPLINK_MTU" ] && [ "$($BB cat "/sys/class/net/$RNDIS_IFACE/mtu" 2>/dev/null)" != "$UPLINK_MTU" ]; then
+        echo "$RNDIS_IFACE MTU is not $UPLINK_MTU"
+        missing=1
     fi
 
     if [ "$missing" -eq 0 ]; then

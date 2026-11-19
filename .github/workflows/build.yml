@@ -56,8 +56,9 @@ jobs:
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then version=${GITHUB_REF_NAME#v}; else version=0.1.0; fi
           echo "VERSION=$version" >>"$GITHUB_ENV"
-          # build_app.sh skips the Docker step because dist/vm_assets is already there
-          GODSEON_VERSION=$version ./app/build_app.sh
+          # dist/vm_assets comes from the vm job of this very commit; GODSEON_REBUILD_VM=0 keeps
+          # build_app.sh from ever reaching for Docker, which macOS runners lack
+          GODSEON_REBUILD_VM=0 GODSEON_VERSION=$version ./app/build_app.sh
       - name: Zip the app
         run: |
           name=GodseonDongle-$VERSION

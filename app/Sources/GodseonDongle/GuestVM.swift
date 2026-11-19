@@ -5,7 +5,8 @@ import Foundation
 import Virtualization
 
 /// The guest: a RAM-only Linux (kernel + initramfs bundled in the app) on Virtualization.framework.
-/// The dongle reaches it over USB/IP from the root helper; its control API listens on eth0:9408.
+/// The dongle (bus ID 1-1) and a tethering phone (1-2) reach it over USB/IP from the root helper;
+/// its control API listens on eth0:9408.
 @MainActor
 final class GuestVM: NSObject {
     enum State: Equatable {
@@ -51,7 +52,8 @@ final class GuestVM: NSObject {
         bootLoader.initialRamdiskURL = assets.appendingPathComponent("initramfs-thrurndis-wifi")
         bootLoader.commandLine = [
             "console=hvc0", "rdinit=/sbin/init", "modules=virtio_pci,virtio_mmio,virtio_console",
-            "godseon.usbip=gw/1-1", "thrurndis-wifi.token=\(token)", "thrurndis-wifi.country=\(country)",
+            "godseon.usbip=gw/\(Helper.wifiBusID)", "godseon.usbip2=gw/\(Helper.tetherBusID)",
+            "thrurndis-wifi.token=\(token)", "thrurndis-wifi.country=\(country)",
         ].joined(separator: " ")
 
         let output = Pipe(), input = Pipe()

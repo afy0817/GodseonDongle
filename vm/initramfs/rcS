@@ -127,11 +127,12 @@ ThruRNDIS-Wi-Fi guest (ThruRNDIS-compatible Alpine initramfs)
 This environment runs entirely from RAM. Files written here are discarded when
 the VM stops.
 
-Upstream is usb0 (RNDIS) when present, otherwise wlan0 (USB Wi-Fi dongle).
-wlan-supervisor runs wpa_supplicant, the ThruRNDIS-Wi-Fi macOS app talks to the control
-API on eth0:9408, and uplink-watcher hands the chosen upstream to the stock
-ThruRNDIS gateway so the host sees the usual readiness markers.
+Uplinks: wlan0 (USB Wi-Fi dongle) and usb0 (a phone's USB tethering, RNDIS), side
+by side. wlan-supervisor runs wpa_supplicant, the GodseonDongle macOS app talks to
+the control API on eth0:9408, and uplink-watcher keeps a ThruRNDIS gateway up for
+each uplink (wlan0: table 100, usb0: table 101 from the host link 10.94.8.2).
   wpa_cli -p /run/wpa_supplicant -i wlan0 status
+  cat /run/thrurndis-wifi/uplinks
 EOF
 
 if [ -e /proc/sys/kernel/hotplug ] && [ -x /sbin/mdev ]; then

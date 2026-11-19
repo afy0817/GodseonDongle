@@ -4,7 +4,8 @@
 import Foundation
 import IOKit
 
-/// Read-only look at the dongle in the I/O Registry (no privileges needed).
+/// Read-only look at the Mac's USB devices in the I/O Registry (no privileges needed). The
+/// devices the helper holds stay listed, interfaces included.
 enum USBDevice {
     enum Speed: Int {
         case low = 0, full, high, superSpeed, superSpeedPlus
@@ -20,6 +21,37 @@ enum USBDevice {
 
         /// Full speed caps the dongle at a few Mbit/s, whatever the Wi-Fi link does.
         var isSlow: Bool { rawValue <= Speed.full.rawValue }
+    }
+
+    /// What a device is to the app.
+    enum Kind: String, Codable {
+        /// A USB Wi-Fi dongle, driven by Linux in the VM.
+        case wifi
+        /// An Android phone, used for its USB tethering (RNDIS).
+        case tether
+    }
+
+    /// One device plugged into the Mac.
+    struct Info: Equatable {
+        var vendorID: Int
+        var productID: Int
+        var name: String
+        var serial: String
+        var speed: Speed?
+        /// USB tethering is on: the phone offers an RNDIS network function.
+        var hasRNDIS: Bool
+        /// adb or MTP: an Android phone, tethering or not.
+        var isAndroid: Bool
+
+        var usbID: String { String(format: "%04x:%04x", vendorID, productID) }
+
+        /// The serial number, when the helper's config can carry it (a phone keeps it in every
+        /// USB mode, while its product ID changes).
+        var safeSerial: String? {
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
+            guard (1...64).contains(serial.count), serial.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+            return serial
+        }
     }
 
     /// Dongles the Linux rtw88 USB driver handles (the device tables of rtw8822bu.c, rtw8821cu.c
@@ -41,18 +73,106 @@ enum USBDevice {
         "0bda:c812", "0bda:c82c", "0bda:c82e", "0bda:d820", "0bda:d82b", "2001:3329"
     ]
 
-    /// "0bda:b812" -> the negotiated speed, nil when the device is not plugged in.
-    static func speed(of id: String) -> Speed? {
-        let parts = id.split(separator: ":")
-        guard parts.count == 2, let vid = Int(parts[0], radix: 16), let pid = Int(parts[1], radix: 16),
-              let match = IOServiceMatching("IOUSBHostDevice") as NSMutableDictionary? else { return nil }
-        match["idVendor"] = vid
-        match["idProduct"] = pid
-        let service = IOServiceGetMatchingService(kIOMainPortDefault, match)
-        guard service != 0 else { return nil }
-        defer { IOObjectRelease(service) }
-        guard let value = IORegistryEntryCreateCFProperty(service, "Device Speed" as CFString, kCFAllocatorDefault, 0)?
-            .takeRetainedValue() as? NSNumber else { return nil }
-        return Speed(rawValue: value.intValue)
+    /// Every USB ID a Wi-Fi driver in the VM claims, from the image's manifest (written by
+    /// vm/builder/build_assets.py). An image from before the list falls back to rtw88IDs.
+    static let wifiIDs: Set<String> = {
+        guard let url = Bundle.main.url(forResource: "manifest", withExtension: "json", subdirectory: "vm_assets"),
+              let data = try? Data(contentsOf: url),
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ids = manifest["wifi_usb_ids"] as? [String], !ids.isEmpty else { return rtw88IDs }
+        return Set(ids.map { $0.lowercased() })
+    }()
+
+    /// Every device plugged in now, in registry order.
+    static func all() -> [Info] {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOUSBHostDevice"), &iterator) == KERN_SUCCESS
+        else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var devices: [Info] = []
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            let p = properties(service)
+            guard let vendor = p["idVendor"] as? Int, let product = p["idProduct"] as? Int else { continue }
+            var info = Info(vendorID: vendor, productID: product,
+                            name: (p["USB Product Name"] as? String ?? p["kUSBProductString"] as? String ?? "")
+                                .trimmingCharacters(in: .whitespaces),
+                            serial: p["USB Serial Number"] as? String ?? p["kUSBSerialNumberString"] as? String ?? "",
+                            speed: (p["Device Speed"] as? Int).flatMap(Speed.init(rawValue:)),
+                            // A wireless controller (RNDIS) at the device level: macOS may leave it
+                            // unconfigured, so its interfaces never show up below.
+                            hasRNDIS: p["bDeviceClass"] as? Int == 0xE0, isAndroid: false)
+            forEachInterface(of: service) { interface in
+                let c = interface["bInterfaceClass"] as? Int ?? -1
+                let s = interface["bInterfaceSubClass"] as? Int ?? -1
+                let r = interface["bInterfaceProtocol"] as? Int ?? -1
+                // RNDIS as Android, Windows and Linux gadgets announce it (the rndis_host match table)
+                if (c == 0xE0 && s == 0x01 && r == 0x03) || (c == 0xEF && s == 0x04 && r == 0x01)
+                    || (c == 0x02 && s == 0x02 && r == 0xFF) {
+                    info.hasRNDIS = true
+                }
+                if (c == 0xFF && s == 0x42 && r == 0x01) || (interface["kUSBString"] as? String) == "MTP" {
+                    info.isAndroid = true
+                }
+            }
+            devices.append(info)
+        }
+        return devices
     }
+
+    private static func properties(_ entry: io_registry_entry_t) -> [String: Any] {
+        var properties: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(entry, &properties, kCFAllocatorDefault, 0) == KERN_SUCCESS else { return [:] }
+        return properties?.takeRetainedValue() as? [String: Any] ?? [:]
+    }
+
+    private static func forEachInterface(of device: io_service_t, _ body: ([String: Any]) -> Void) {
+        var children: io_iterator_t = 0
+        guard IORegistryEntryGetChildIterator(device, kIOServicePlane, &children) == KERN_SUCCESS else { return }
+        defer { IOObjectRelease(children) }
+        while case let child = IOIteratorNext(children), child != 0 {
+            defer { IOObjectRelease(child) }
+            if IOObjectConformsTo(child, "IOUSBHostInterface") != 0 { body(properties(child)) }
+        }
+    }
+}
+
+/// Calls back on the main queue whenever a USB device appears or goes away, such as a phone
+/// coming back in another USB mode once tethering is switched on.
+@MainActor
+final class USBWatcher {
+    private let port: IONotificationPortRef
+    private var iterators: [io_iterator_t] = []
+    fileprivate let onChange: @MainActor () -> Void
+
+    init?(onChange: @escaping @MainActor () -> Void) {
+        guard let port = IONotificationPortCreate(kIOMainPortDefault) else { return nil }
+        self.port = port
+        self.onChange = onChange
+        IONotificationPortSetDispatchQueue(port, .main)
+        let callback: IOServiceMatchingCallback = { refcon, iterator in
+            usbWatcherDrain(iterator)
+            guard let refcon else { return }
+            let watcher = Unmanaged<USBWatcher>.fromOpaque(refcon).takeUnretainedValue()
+            MainActor.assumeIsolated { watcher.onChange() }
+        }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for type in [kIOFirstMatchNotification, kIOTerminatedNotification] {
+            var iterator: io_iterator_t = 0
+            // each call consumes the matching dictionary it gets
+            guard IOServiceAddMatchingNotification(port, type, IOServiceMatching("IOUSBHostDevice"), callback, refcon,
+                                                   &iterator) == KERN_SUCCESS else { continue }
+            usbWatcherDrain(iterator)       // arms the notification
+            iterators.append(iterator)
+        }
+    }
+
+    deinit {
+        for iterator in iterators { IOObjectRelease(iterator) }
+        IONotificationPortDestroy(port)
+    }
+}
+
+private func usbWatcherDrain(_ iterator: io_iterator_t) {
+    while case let object = IOIteratorNext(iterator), object != 0 { IOObjectRelease(object) }
 }

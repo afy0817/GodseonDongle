@@ -111,10 +111,10 @@ scan_results_json() {
         END { if (!count) printf "" }'
 }
 
+# GodseonDongle: wlan0 and usb0 (a phone's USB tethering) have a gateway each (uplink-watcher);
+# "uplink" and "route_ready" describe wlan0's, the tether_* fields usb0's.
 current_uplink() {
-    if [ -e /sys/class/net/usb0 ]; then
-        echo usb0
-    elif [ -e "/sys/class/net/$WLAN_IFACE" ]; then
+    if [ -e "/sys/class/net/$WLAN_IFACE" ]; then
         echo "$WLAN_IFACE"
     fi
 }
@@ -122,12 +122,30 @@ current_uplink() {
 route_ready() {
     uplink=$1
     [ -n "$uplink" ] || return 1
-    if [ "$uplink" = usb0 ]; then
-        THRURNDIS_RNDIS_IFACE=usb0 "$GATEWAY_SCRIPT" status >/dev/null 2>&1
-    else
-        THRURNDIS_RNDIS_IFACE=$uplink THRURNDIS_RNDIS_RESOLV_CONF=/run/thrurndis-wifi/resolv.conf \
-            THRURNDIS_RNDIS_ALLOW_SUBNET_ONLY=1 "$GATEWAY_SCRIPT" status >/dev/null 2>&1
+    THRURNDIS_RNDIS_IFACE=$uplink THRURNDIS_RNDIS_RESOLV_CONF=/run/thrurndis-wifi/resolv.conf \
+        THRURNDIS_RNDIS_ALLOW_SUBNET_ONLY=1 "$GATEWAY_SCRIPT" status >/dev/null 2>&1
+}
+
+# usb0's address, router and DNS server, its USB ID, and whether uplink-watcher has its
+# gateway (policy route, NAT, DNS proxy) ready.
+tether_json() {
+    t_present=false t_ipv4="" t_prefix="" t_gateway="" t_dns="" t_ready=false t_ids=""
+    if [ -e /sys/class/net/usb0 ]; then
+        t_present=true
+        t_cidr=$(ip -4 -o addr show dev usb0 scope global 2>/dev/null | $BB awk '{ print $4; exit }')
+        if [ -n "$t_cidr" ]; then
+            t_ipv4=${t_cidr%%/*}
+            t_prefix=${t_cidr#*/}
+        fi
+        t_gateway=$(ip -4 route show default dev usb0 2>/dev/null | $BB awk '$2 == "via" { print $3; exit }')
+        t_dns=$($BB awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf 2>/dev/null)
+        $BB grep -qx 'usb0 ready' /run/thrurndis-wifi/uplinks 2>/dev/null && t_ready=true
+        t_ids=$($BB cat /sys/class/net/usb0/device/../idVendor 2>/dev/null || true)
+        [ -n "$t_ids" ] && t_ids="$t_ids:$($BB cat /sys/class/net/usb0/device/../idProduct 2>/dev/null || true)"
     fi
+    printf '"tether":%s,"tether_ipv4":%s,"tether_prefix":%s,"tether_gateway":%s,"tether_dns":%s,"tether_ready":%s,"tether_usb_id":%s' \
+        "$t_present" "$(json_str "$t_ipv4")" "$(json_num "$t_prefix")" "$(json_str "$t_gateway")" \
+        "$(json_str "$t_dns")" "$t_ready" "$(json_str "$t_ids")"
 }
 
 # A USB device that reached the VM but that no driver claimed, such as a
@@ -225,7 +243,7 @@ action_status() {
     esac
     usb_recover=$($BB awk -F '=' '$1 == "state" && $2 != "idle" { print $2 }' /run/thrurndis-wifi/usb-recover 2>/dev/null)
 
-    reply "{\"ok\":true,\"device\":$device,\"usb_id\":$(json_str "$usb_ids"),\"wpa_running\":$(wpa_running && echo true || echo false),\"wpa_state\":$(json_str "$wpa_state"),\"ssid_hex\":$(json_str "$ssid_hex"),\"bssid\":$(json_str "$bssid"),\"freq\":$(json_num "$freq"),\"rssi\":$(json_num "$rssi"),\"key_mgmt\":$(json_str "$key_mgmt"),\"ipv4\":$(json_str "$ipv4"),\"prefix\":$(json_num "$prefix"),\"gateway\":$(json_str "$gateway"),\"dns\":$(json_str "$dns"),\"uplink\":$(json_str "$uplink"),\"route_ready\":$ready,\"configured_ssid_hex\":$(json_str "$configured"),\"auth_error\":$(json_str "$auth_error"),\"ip_source\":$(json_str "$ip_source"),\"ip_error\":$(json_str "$ip_error"),\"ip_conflict_mac\":$(json_str "$ip_conflict_mac"),\"usb_unsupported\":$(json_str "$usb_unsupported"),\"boot_id\":$(json_str "$($BB cat /proc/sys/kernel/random/boot_id 2>/dev/null)"),\"usb_tx_lag\":$(json_num "$usb_tx_lag"),\"usb_tx_stall\":$usb_tx_stall,\"usb_recover\":$(json_str "$usb_recover")}"
+    reply "{\"ok\":true,\"device\":$device,\"usb_id\":$(json_str "$usb_ids"),\"wpa_running\":$(wpa_running && echo true || echo false),\"wpa_state\":$(json_str "$wpa_state"),\"ssid_hex\":$(json_str "$ssid_hex"),\"bssid\":$(json_str "$bssid"),\"freq\":$(json_num "$freq"),\"rssi\":$(json_num "$rssi"),\"key_mgmt\":$(json_str "$key_mgmt"),\"ipv4\":$(json_str "$ipv4"),\"prefix\":$(json_num "$prefix"),\"gateway\":$(json_str "$gateway"),\"dns\":$(json_str "$dns"),\"uplink\":$(json_str "$uplink"),\"route_ready\":$ready,\"configured_ssid_hex\":$(json_str "$configured"),\"auth_error\":$(json_str "$auth_error"),\"ip_source\":$(json_str "$ip_source"),\"ip_error\":$(json_str "$ip_error"),\"ip_conflict_mac\":$(json_str "$ip_conflict_mac"),\"usb_unsupported\":$(json_str "$usb_unsupported"),\"boot_id\":$(json_str "$($BB cat /proc/sys/kernel/random/boot_id 2>/dev/null)"),\"usb_tx_lag\":$(json_num "$usb_tx_lag"),\"usb_tx_stall\":$usb_tx_stall,\"usb_recover\":$(json_str "$usb_recover"),$(tether_json)}"
 }
 
 action_results() {
@@ -291,6 +309,17 @@ action_diag() {
     echo "== iw station"; iw dev "$WLAN_IFACE" station dump 2>&1 |
         $BB grep -E 'Station|signal|bitrate|tx retries|tx failed|rx drop|beacon loss|inactive'
     echo "== neighbours"; ip -4 neigh show dev "$WLAN_IFACE" 2>&1
+    echo "== uplinks"; $BB cat /run/thrurndis-wifi/uplinks 2>/dev/null
+    echo "== policy"; ip -4 rule 2>&1; ip -4 route show table 100 2>&1; ip -4 route show table 101 2>&1
+    echo "== tether"
+    if [ -e /sys/class/net/usb0 ]; then
+        ip -4 addr show dev usb0 2>&1
+        ip -4 route show dev usb0 2>&1
+        $BB cat /etc/resolv.conf 2>/dev/null
+        nft list table ip thrurndis_usb0 2>&1 | $BB grep -E 'dnat|masquerade|oifname' | $BB head -n 8
+    else
+        echo "no usb0"
+    fi
     echo "== wpa_supplicant log"; $BB tail -n 20 /tmp/wpa_supplicant.log 2>/dev/null
     echo "== syslog"; $BB tail -n 80 /run/thrurndis-wifi/messages 2>/dev/null
     echo "== usb tx"

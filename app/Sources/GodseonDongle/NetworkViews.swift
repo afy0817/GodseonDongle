@@ -36,6 +36,18 @@ struct NetworkList: View {
                     Label(t("현재 상태"), systemImage: "gauge.with.dots.needle.67percent")
                         .tag(NetworkSelection.overview)
                 }
+                Section(t("장치")) {
+                    let devices = model.devices
+                    if devices.isEmpty {
+                        Text(t("USB Wi-Fi 동글이나 안드로이드 폰을 꽂으면 보여요."))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(devices) { item in
+                        DeviceRow(model: model, item: item)
+                            .tag(NetworkSelection.device(item.key))
+                    }
+                }
                 if !model.savedNetworks.isEmpty {
                     Section(t("저장된 네트워크")) {
                         ForEach(model.savedNetworks) { entry in
@@ -196,7 +208,7 @@ struct NetworkDetail: View {
         let ssid: String
         switch selection {
         case .network(let name): ssid = name
-        case .hidden, .overview: ssid = ""
+        case .hidden, .overview, .device: ssid = ""
         }
         let saved = model.savedNetworks.first { $0.ssid == ssid }
         _form = StateObject(wrappedValue: NetworkForm(ssid: ssid, hidden: saved?.hidden ?? (selection == .hidden), saved: saved))
@@ -471,6 +483,8 @@ struct OverviewPane: View {
                             if let rssi = status.rssi { infoRow(t("신호"), "\(rssi) dBm") }
                             infoRow("AP", status.bssid)
                         }
+                        Button(t("연결 끊기")) { Task { await model.disconnect() } }
+                            .disabled(model.busy != nil)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
@@ -479,7 +493,11 @@ struct OverviewPane: View {
                     }
                 }
 
-                if let speed = model.dongleSpeed, speed.isSlow {
+                if model.tetherPhase != .none {
+                    TetherBlock(model: model)
+                }
+
+                if let speed = model.wifiSpeed, speed.isSlow {
                     Label(t("동글이 느린 USB 모드(\(speed.label), 12Mbit/s)로 붙어 있어요. 동글을 뽑았다가 다시 꽂아 주세요."),
                           systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -487,6 +505,13 @@ struct OverviewPane: View {
 
                 FormBlock(t("맥 경로")) {
                     let routes = model.helperStatus?.routes ?? []
+                    if model.tetherPhase == .internet {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            Text(t("기본 경로·DNS"))
+                            Text(t("→ 폰")).foregroundStyle(.secondary)
+                        }
+                    }
                     if routes.isEmpty && model.skippedRoutes.isEmpty {
                         Text(model.isConnected ? t("보낼 대역이 없어요.") : t("Wi-Fi에 연결되면 그 대역을 이쪽으로 보내요."))
                             .foregroundStyle(.secondary)
@@ -510,20 +535,14 @@ struct OverviewPane: View {
                     }
                 }
 
-                if let helper = model.helperStatus, helper.client {
-                    FormBlock("USB/IP") {
-                        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
-                            infoRow(t("속도"), String(format: t("받기 %.1f · 보내기 %.1f Mbit/s"), helper.in_mbps, helper.out_mbps))
-                            infoRow(t("붙어 있던 시간"), Self.duration(helper.client_seconds))
-                            infoRow(t("송신 멈춤"), helper.stalls == 0 ? t("없음") : t("\(helper.stalls)번 (동글 재설정 \(helper.resets)번)"))
-                            if helper.urbs_per_s > 0 {
-                                infoRow(t("USB 요청"), String(format: t("초당 %.0f개 (제어 %.0f · 받기 %.0f · 보내기 %.0f)"),
-                                                         helper.urbs_per_s, helper.control_per_s, helper.in_per_s, helper.out_per_s))
-                            }
-                            if helper.filtered_per_s > 0 {
-                                infoRow(t("걸러낸 프레임"), String(format: t("초당 %.0f개 (Wi-Fi 6 Trigger)"), helper.filtered_per_s))
-                            }
-                        }
+                if let helper = model.helperStatus?.wifi, helper.client {
+                    FormBlock(model.helperStatus?.tether?.client == true ? t("USB/IP · 동글") : "USB/IP") {
+                        USBIPGrid(device: helper)
+                    }
+                }
+                if let helper = model.helperStatus?.tether, helper.client {
+                    FormBlock(t("USB/IP · 폰")) {
+                        USBIPGrid(device: helper)
                     }
                 }
             }
@@ -533,15 +552,50 @@ struct OverviewPane: View {
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-            Text(value).textSelection(.enabled)
-        }
+        InfoRow(label: label, value: value)
     }
 
     static func duration(_ seconds: Int) -> String {
         if seconds < 60 { return t("\(seconds)초") }
         if seconds < 3600 { return t("\(seconds / 60)분") }
         return t("\(seconds / 3600)시간 \((seconds % 3600) / 60)분")
+    }
+}
+
+/// A label and a selectable value in a two-column Grid.
+struct InfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+            Text(value).textSelection(.enabled)
+        }
+    }
+}
+
+/// Traffic and health of one device's USB/IP connection.
+struct USBIPGrid: View {
+    let device: Helper.Status.Device
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
+            InfoRow(label: t("속도"), value: String(format: t("받기 %.1f · 보내기 %.1f Mbit/s"), device.in_mbps, device.out_mbps))
+            InfoRow(label: t("붙어 있던 시간"), value: OverviewPane.duration(device.client_seconds))
+            if device.kind == "tether" {
+                InfoRow(label: t("송신 멈춤"), value: device.stalls == 0 ? t("없음") : t("\(device.stalls)번"))
+            } else {
+                InfoRow(label: t("송신 멈춤"),
+                        value: device.stalls == 0 ? t("없음") : t("\(device.stalls)번 (동글 재설정 \(device.resets)번)"))
+            }
+            if device.urbs_per_s > 0 {
+                InfoRow(label: t("USB 요청"), value: String(format: t("초당 %.0f개 (제어 %.0f · 받기 %.0f · 보내기 %.0f)"),
+                                                        device.urbs_per_s, device.control_per_s, device.in_per_s, device.out_per_s))
+            }
+            if device.filtered_per_s > 0 {
+                InfoRow(label: t("걸러낸 프레임"), value: String(format: t("초당 %.0f개 (Wi-Fi 6 Trigger)"), device.filtered_per_s))
+            }
+        }
     }
 }

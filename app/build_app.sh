@@ -5,8 +5,8 @@
 # Builds dist/GodseonDongle.app: the app, its VM image and its root helper, ad-hoc signed
 # with the virtualization entitlement only (no Apple developer account needed).
 #   ./app/build_app.sh [--install]     --install copies it to /Applications
-# The VM image (dist/vm_assets) is built with Docker the first time, or again with
-# GODSEON_REBUILD_VM=1.
+# The VM image (dist/vm_assets) is built with Docker the first time, again when vm/ no longer
+# matches the hash its manifest keeps, or always with GODSEON_REBUILD_VM=1 (=0 keeps it).
 
 set -eu
 
@@ -24,7 +24,18 @@ ASSETS=$DIST/vm_assets
 BUNDLE=$DIST/GodseonDongle.app
 VERSION=${GODSEON_VERSION:-0.1.0}
 
-if [ ! -f "$ASSETS/initramfs-thrurndis-wifi" ] || [ "${GODSEON_REBUILD_VM:-0}" = 1 ]; then
+REBUILD_VM=${GODSEON_REBUILD_VM:-}
+if [ -z "$REBUILD_VM" ] && [ -f "$ASSETS/manifest.json" ]; then
+    # The app and the VM scripts change together (kernel command line, control API).
+    WANT=$(sh "$ROOT/vm/build.sh" --sources-hash)
+    HAVE=$(plutil -extract sources raw -o - "$ASSETS/manifest.json" 2>/dev/null || true)
+    if [ "$WANT" != "$HAVE" ]; then
+        echo "dist/vm_assets comes from other vm/ sources (${HAVE:-unknown}, now $WANT); rebuilding it." \
+            "GODSEON_REBUILD_VM=0 keeps it." >&2
+        REBUILD_VM=1
+    fi
+fi
+if [ ! -f "$ASSETS/initramfs-thrurndis-wifi" ] || [ "$REBUILD_VM" = 1 ]; then
     THRURNDIS_WIFI_VERSION="godseon-$VERSION" sh "$ROOT/vm/build.sh" "$ASSETS"
 fi
 
@@ -40,7 +51,8 @@ for file in Image-lts initramfs-thrurndis-wifi manifest.json SHA256SUMS; do
     cp "$ASSETS/$file" "$BUNDLE/Contents/Resources/vm_assets/"
 done
 clang -fobjc-arc -O2 -Wall -mmacosx-version-min=14.0 -o "$BUNDLE/Contents/Resources/helper/godseon-dongled" \
-    "$ROOT/helper/godseon-dongled.m" -framework Foundation -framework IOKit -framework IOUSBHost
+    "$ROOT/helper/godseon-dongled.m" -framework Foundation -framework IOKit -framework IOUSBHost \
+    -framework SystemConfiguration
 cp "$ROOT/helper/install.sh" "$ROOT/helper/uninstall.sh" "$BUNDLE/Contents/Resources/helper/"
 chmod 755 "$BUNDLE/Contents/Resources/helper/"*
 

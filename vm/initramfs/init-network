@@ -11,7 +11,10 @@ VZNAT_WAIT_SECONDS=${THRURNDIS_VZNAT_WAIT_SECONDS:-8}
 VZNAT_DHCP_ATTEMPTS=${THRURNDIS_VZNAT_DHCP_ATTEMPTS:-5}
 VZNAT_DHCP_TIMEOUT_SECONDS=${THRURNDIS_VZNAT_DHCP_TIMEOUT_SECONDS:-2}
 VZNAT_DHCP_TOTAL_TIMEOUT_SECONDS=${THRURNDIS_VZNAT_DHCP_TOTAL_TIMEOUT_SECONDS:-16}
-HOST_LINK_GUEST_CIDR=192.168.100.1/24
+# GodseonDongle change: the host link is 10.94.8.1/30 (ThruRNDIS: 192.168.100.1/24, which
+# cable modems often use). The Mac's end, 10.94.8.2, is an alias the GodseonDongle helper puts
+# on the VZ NAT bridge while the Mac uses a phone for internet (see eth0-usb0-gateway).
+HOST_LINK_GUEST_CIDR=${GODSEON_HOST_LINK_GUEST_CIDR:-10.94.8.1/30}
 
 log() {
     echo "thrurndis-net: $*" >/dev/kmsg 2>/dev/null || true

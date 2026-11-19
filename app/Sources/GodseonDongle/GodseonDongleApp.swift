@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// Hands the dongle back and drops the Mac routes before quitting.
+    /// Hands the devices back and drops the Mac routes and the phone's internet before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitReady { return .terminateNow }
         Task {
@@ -81,9 +81,11 @@ struct MenuBarIcon: View {
     }
 
     private var icon: Image {
+        let phoneUp = [.ready, .internet].contains(model.tetherPhase)
         switch model.phase {
         case .connected: return Image(systemName: "antenna.radiowaves.left.and.right")
         case .off, .needsHelper: return Image(systemName: "antenna.radiowaves.left.and.right.slash")
+        case .noWiFiDevice where phoneUp: return Image(systemName: "antenna.radiowaves.left.and.right")
         case .problem, .vmFailed, .dongleError, .noDongle: return Image(systemName: "exclamationmark.triangle")
         default: return Image(systemName: "antenna.radiowaves.left.and.right.circle")
         }
@@ -96,6 +98,9 @@ struct MenuBarMenu: View {
 
     var body: some View {
         Text(PhaseText(model: model).title)
+        if model.phase != .noWiFiDevice, model.tetherPhase != .none {
+            Text(TetherText(model: model).title)
+        }
         Divider()
         Button(t("GodseonDongle 열기")) {
             NSApp.setActivationPolicy(.regular)

@@ -227,6 +227,24 @@ def install_project_files(root: pathlib.Path, src: pathlib.Path, release: dict,
     add_file(root, "etc/thrurndis-wifi-release", (json.dumps(release, indent=2) + "\n").encode(), 0o644)
 
 
+def wifi_usb_ids(root: pathlib.Path, release: str, drivers: list[Driver]) -> list[str]:
+    """vendor:product of every device the Wi-Fi drivers claim by USB ID (the app lists these as
+    dongles): the image's modules.alias entries for the drivers.conf modules, plus its newid=."""
+    modules = {driver.module for driver in drivers}
+    ids = set()
+    alias = root / "lib/modules" / release / "modules.alias"
+    for line in alias.read_text().splitlines():
+        match = re.fullmatch(r"alias usb:v([0-9A-F]{4})p([0-9A-F]{4})\S* (\S+)", line.strip())
+        if match and match.group(3) in modules:
+            ids.add(f"{match.group(1)}:{match.group(2)}".lower())
+    for driver in drivers:
+        for vendor, product, _, _ in driver.new_ids:
+            ids.add(f"{vendor}:{product}")
+    if not ids:
+        fail("modules.alias lists no USB IDs for the Wi-Fi drivers")
+    return sorted(ids)
+
+
 def extract_linux_image(vmlinuz: pathlib.Path, destination: pathlib.Path) -> None:
     data = vmlinuz.read_bytes()
     offset = data.find(b"\x1f\x8b\x08")
@@ -442,6 +460,7 @@ def main() -> int:
     parser.add_argument("--src", type=pathlib.Path, required=True)
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--version", default="dev")
+    parser.add_argument("--sources", default="", help="vm/build.sh --sources-hash, kept in the manifest")
     parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("/cache"))
     parser.add_argument("--no-kernel-patches", action="store_true",
                         help="stock rtw88 modules (for A/B comparisons)")
@@ -473,6 +492,7 @@ def main() -> int:
     patched = sorted(m for m in modules if pathlib.Path(m).name.removesuffix(".zst") in overrides)
     firmware = copy_firmware(root, root / "lib/modules" / kernel_release,
                              BASE_FIRMWARE_GLOBS + [pattern for d in drivers for pattern in d.files])
+    usb_ids = wifi_usb_ids(root, kernel_release, drivers)
 
     args.out.mkdir(parents=True, exist_ok=True)
     for stale in args.out.iterdir():
@@ -486,8 +506,10 @@ def main() -> int:
     extract_linux_image(pathlib.Path("/boot/vmlinuz-stable"), image)
     write_initramfs(root, initramfs)
 
-    manifest = dict(assetVersion=1, schemaVersion=1, **release_info,
-                    drivers=[d.module for d in drivers],
+    # GodseonDongle: sources tells build_app.sh whether this image matches vm/; wifi_usb_ids
+    # are the dongles the app offers in its device list.
+    manifest = dict(assetVersion=1, schemaVersion=1, **release_info, sources=args.sources,
+                    drivers=[d.module for d in drivers], wifi_usb_ids=usb_ids,
                     packages=packages, modules=modules, firmware=firmware,
                     kernel_patches=[p.name for p in patches], patched_modules=patched)
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
