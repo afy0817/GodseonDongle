@@ -1,7 +1,5 @@
 # GodseonDongle
 
-[![build](https://github.com/afy0817/GodseonDongle/actions/workflows/build.yml/badge.svg)](https://github.com/afy0817/GodseonDongle/actions/workflows/build.yml)
-
 GodseonDongle is a macOS app that keeps the Mac's built-in Wi-Fi as it is and joins a second
 Wi-Fi network at the same time through a USB Wi-Fi dongle — handy for equipment or lab networks
 that have no internet. A small root helper captures the dongle and hands it over USB/IP to a tiny
@@ -12,6 +10,41 @@ to the dongle. No UTM, no kernel extension, no Apple developer account. The app 
 English (Settings > Language); the rest of this README is in Korean.
 
 맥 내장 Wi-Fi는 그대로 쓰면서 USB Wi-Fi 동글로 다른 Wi-Fi(장비망 등)에 동시에 붙게 해 주는 macOS 앱이에요. 안드로이드 폰의 USB 테더링(RNDIS)도 동글과 함께 맥의 인터넷으로 쓸 수 있어요. UTM, ThruRNDIS, WireGuard 같은 다른 앱 없이 혼자 돌아가요.
+
+## 설치
+
+필요한 것:
+
+- Apple Silicon 맥, macOS 14 이상
+- 리눅스 드라이버가 있는 USB Wi-Fi 동글. 넣어 둔 드라이버는 [GodseonDongle-VM의 drivers.conf](https://github.com/afy0817/GodseonDongle-VM/blob/main/drivers.conf)에 있어요(rtw88, rtw89, mt76, rtl8xxxu, rt2800usb, ath9k_htc 등). 실제로 시험한 동글은 RTL8812BU(`0bda:b812`)예요.
+- 폰 테더링을 쓰려면 USB 테더링에 RNDIS를 쓰는 안드로이드 폰(갤럭시 등)
+
+1. [최신 릴리스](https://github.com/afy0817/GodseonDongle/releases/latest)에서 `GodseonDongle-<버전>.zip`을 받아 풀고, `GodseonDongle.app`을 `/Applications`로 옮겨요.
+2. ad-hoc 서명이라 처음 열 때 macOS가 막아요. Finder에서 오른쪽 클릭 → **열기**를 누르거나 아래 명령을 실행해요.
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
+   ```
+
+새로 받거나 빌드한 앱은 ad-hoc 서명이 바뀌어서, 처음 저장된 Wi-Fi에 붙을 때 macOS가 키체인의 비밀번호를 이 앱에 줘도 되는지 한 번 물어요. **항상 허용**을 누르면 돼요.
+
+## 처음 실행
+
+1. 앱을 열고 **도우미 설치**를 눌러요. 관리자 암호는 macOS가 직접 물어요.
+2. 동글을 꽂으면 **장치** 목록에 보이고, 도우미가 가져와 VM에 붙여요. 처음 꽂은 동글은 바로 써요.
+3. 목록에서 Wi-Fi를 고르고 비밀번호와 IP 설정을 넣은 뒤 **연결**을 눌러요.
+4. 고정 IP 네트워크라면 **직접 입력**을 체크하고 IP·서브넷·게이트웨이와 추가 경로(예: `10.10.0.0/24 → 192.168.50.254`)를 넣어요. 체크를 풀면 자동(DHCP)으로 받고, 적어 둔 값은 남아 있어요.
+5. 설정에서 **로그인할 때 열기**를 켜면 로그인할 때 저절로 떠요. 저장된 네트워크에는 자동으로 다시 붙어요.
+
+- 목록 맨 위 **현재 상태**를 누르면 연결, 폰, 맥 경로, USB/IP 상태를 다시 볼 수 있어요.
+- **폰 테더링:** 폰을 꽂으면 **장치** 목록에 보여요. 폰을 골라 **USB 테더링을 켜면 VM에 넘기기**를 켜고, 폰에서 USB 테더링을 켜요(갤럭시: 설정 > 연결 > 모바일 핫스팟 및 테더링). **맥 인터넷을 이 폰으로**는 처음부터 켜져 있어요. 예전 앱으로 도우미를 설치했다면 설정의 **도우미 업데이트**를 먼저 눌러요.
+- 비밀번호 칸의 눈 버튼을 누르면 친 글자가 보이고 입력기도 바꿀 수 있어요. 저장된 비밀번호는 Touch ID나 맥 암호로 확인한 뒤 볼 수 있어요.
+- 설정의 **언어**에서 시스템 설정 따름, 한국어, English를 고를 수 있어요. 바로 바뀌어요.
+- 앱을 업데이트한 뒤 설정에 **도우미 업데이트**가 보이면 눌러요(관리자 암호).
+
+## 지우기
+
+설정의 **도우미 제거**를 누르거나 `sudo sh helper/uninstall.sh`를 실행한 뒤 앱을 지워요. 저장한 Wi-Fi 비밀번호는 키체인에 "GodseonDongle: 네트워크 이름" 항목으로 남아 있어요.
 
 ## 구조
 
@@ -34,7 +67,7 @@ godseon-dongled  (root 도우미, launchd)
   - VM은 맥이 보낸 주소로 길을 나눠요. 브리지 주소에서 온 건 동글(`wlan0`)로, `10.94.8.2`에서 온 건 폰(`usb0`)으로 보내요.
   - 이 서비스는 임시 항목이라 도우미가 죽어도 macOS가 바로 지워요. 폰을 뽑거나 앱을 끄면 도우미가 1~2초 안에 거둬요.
   - Pixel 6 이후처럼 USB 테더링에 NCM을 쓰는 폰은 macOS가 직접 써서 이 앱이 필요 없어요. 갤럭시 등 RNDIS를 쓰는 폰을 위한 기능이에요.
-- **VM:** 앱이 직접 띄워요. 앱 서명에는 `com.apple.security.virtualization` 하나만 있으면 되고, ad-hoc 서명으로 충분해요.
+- **VM:** 앱이 직접 띄워요. 이미지는 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM)의 릴리스예요. 앱 서명에는 `com.apple.security.virtualization` 하나만 있으면 되고, ad-hoc 서명으로 충분해요.
 - **Wi-Fi:** 비밀번호는 맥 키체인에 저장해요. VM에는 맥에서 계산한 PSK만 넘어가요.
 - **맥 경로:** 연결한 Wi-Fi의 대역과 네트워크별 추가 경로를 VM으로 보내요.
   - 맥의 다른 네트워크(내장 Wi-Fi 등)와 겹치는 대역은 빼요.
@@ -42,7 +75,16 @@ godseon-dongled  (root 도우미, launchd)
 - **송신 멈춤 대비:** 동글로 보내는 요청이 6초 넘게 멈추면 도우미가 먼저 그 통로를 비워요. 그래도 안 풀리면 동글을 재설정하고, VM이 약 15초 뒤 다시 붙어요.
 - **앱을 끄면:** 동글과 폰을 macOS에 돌려주고 맥 경로와 폰 인터넷을 지워요. 창만 닫으면 상단바 아이콘으로 계속 돌아가요.
 
-동글은 VM 안의 리눅스 드라이버가 맡아요. 넣어 둔 드라이버는 [GodseonDongle-VM의 drivers.conf](https://github.com/afy0817/GodseonDongle-VM/blob/main/drivers.conf)에 있어요(rtw88, rtw89, mt76, rtl8xxxu, rt2800usb, ath9k_htc 등). 실제로 시험한 동글은 RTL8812BU(`0bda:b812`)예요.
+## 포트
+
+이 프로젝트는 **9408**만 써요. 8080, 5000 같은 흔한 포트는 쓰지 않아요.
+
+| 어디 | 무엇 |
+|---|---|
+| 맥 `0.0.0.0:9408` | 도우미의 USB/IP 서버. 앱이 띄운 VM 주소에서 오는 연결만 받아요 |
+| VM `eth0:9408` | 제어 API. 맥 쪽 연결만 받고, 부팅마다 바뀌는 토큰이 필요해요 |
+
+주소는 VZ NAT 대역 말고 폰 인터넷용 호스트 링크 `10.94.8.0/30` 하나만 써요(맥 `10.94.8.2`, VM `10.94.8.1`). 맥의 다른 인터페이스가 이 대역을 쓰고 있으면 도우미가 폰 인터넷을 켜지 않고 오류로 알려요.
 
 ## 빌드
 
@@ -56,48 +98,40 @@ macOS 14 이상과 Xcode(SwiftUI 매크로 때문)가 필요해요. VM 이미지
 ./app/build_app.sh --install
 ```
 
+결과물은 `dist/GodseonDongle.app`(약 59MB)이고, `--install`을 붙이면 `/Applications`에 복사해요.
+
 VM 이미지를 직접 만들어 넣으려면 GodseonDongle-VM에서 `./build.sh`를 돌린 뒤 그 폴더를 가리켜요.
 
 ```bash
 VM_ASSETS_DIR=../GodseonDongle-VM/dist/vm_assets ./app/build_app.sh
 ```
 
-결과물은 `dist/GodseonDongle.app`(약 58MB)이고, `--install`을 붙이면 `/Applications`에 복사해요.
+### 릴리스
 
-GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))도 같은 앱을 맥 러너에서 빌드하고, 실행마다 zip을 아티팩트로 남겨요. `v`로 시작하는 태그(예: `v0.1.0`)를 올리면 Release에 앱 zip과, 앱에 든 VM 이미지의 대응 소스 `vm_assets-sources.tar.gz`가 함께 붙어요(`./app/build_app.sh --release`가 받아 와요). 내려받은 앱은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. Finder에서 오른쪽 클릭 → **열기**를 누르거나 아래 명령을 실행해요.
+GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))는 `v`로 시작하는 태그를 올릴 때만 돌아요. main에 push하거나 풀 리퀘스트를 열 때는 돌지 않아요. 태그를 올리면 맥 러너에서 앱을 빌드하고, 그 태그의 Release에 앱 zip과 앱에 든 VM 이미지의 대응 소스 `vm_assets-sources.tar.gz`를 올려요(`./app/build_app.sh --release`가 받아 와요).
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
+git tag -a v0.3.0 -m "GodseonDongle 0.3.0"
+git push origin v0.3.0
 ```
 
-새로 빌드한 앱은 ad-hoc 서명이 바뀌어서, 처음 저장된 Wi-Fi에 붙을 때 macOS가 키체인의 비밀번호를 이 앱에 줘도 되는지 한 번 물어요. **항상 허용**을 누르면 돼요.
+## 폴더
 
-## 처음 실행
-
-1. 앱을 열고 **도우미 설치**를 눌러요. 관리자 암호는 macOS가 직접 물어요.
-2. 동글을 꽂으면 **장치** 목록에 보이고, 도우미가 가져와 VM에 붙여요. 처음 꽂은 동글은 바로 써요.
-3. 목록에서 Wi-Fi를 고르고 비밀번호와 IP 설정을 넣은 뒤 **연결**을 눌러요.
-4. 고정 IP 네트워크라면 **직접 입력**을 체크하고 IP·서브넷·게이트웨이와 추가 경로(예: `10.10.0.0/24 → 192.168.50.254`)를 넣어요. 체크를 풀면 자동(DHCP)으로 받고, 적어 둔 값은 남아 있어요.
-5. 설정에서 **로그인할 때 열기**를 켜면 로그인할 때 저절로 떠요. 저장된 네트워크에는 자동으로 다시 붙어요.
-
-- 목록 맨 위 **현재 상태**를 누르면 연결, 폰, 맥 경로, USB/IP 상태를 다시 볼 수 있어요.
-- **폰 테더링:** 폰을 꽂으면 **장치** 목록에 보여요. 폰을 골라 **USB 테더링을 켜면 VM에 넘기기**를 켜고, 폰에서 USB 테더링을 켜요(갤럭시: 설정 > 연결 > 모바일 핫스팟 및 테더링). **맥 인터넷을 이 폰으로**는 처음부터 켜져 있어요. 예전 앱으로 도우미를 설치했다면 설정의 **도우미 업데이트**를 먼저 눌러요.
-- 비밀번호 칸의 눈 버튼을 누르면 친 글자가 보이고 입력기도 바꿀 수 있어요. 저장된 비밀번호는 Touch ID나 맥 암호로 확인한 뒤 볼 수 있어요.
-- 설정의 **언어**에서 시스템 설정 따름, 한국어, English를 고를 수 있어요. 바로 바뀌어요.
-- 앱을 업데이트한 뒤 설정에 **도우미 업데이트**가 보이면 눌러요(관리자 암호).
-
-## 포트
-
-이 프로젝트는 **9408**만 써요. 8080, 5000 같은 흔한 포트는 쓰지 않아요.
-
-| 어디 | 무엇 |
+| 폴더 | 내용 |
 |---|---|
-| 맥 `0.0.0.0:9408` | 도우미의 USB/IP 서버. 앱이 띄운 VM 주소에서 오는 연결만 받아요 |
-| VM `eth0:9408` | 제어 API. 맥 쪽 연결만 받고, 부팅마다 바뀌는 토큰이 필요해요 |
+| `app/` | 맥 앱 (SwiftUI, Virtualization). `build_app.sh`로 번들을 만들어요. 아이콘은 `app/icon/make_icon.swift`로 그려요 |
+| `app/Resources/*.lproj` | 영어 문자열. 코드의 한국어 문자열이 키예요. `python3 app/tools/check_strings.py`로 빠진 번역을 찾아요 |
+| `helper/` | root 도우미 `godseon-dongled` (USB/IP 서버 + 맥 경로 + 폰 인터넷 + Trigger 프레임 거르기 + TSO 끄기), 설치·제거 스크립트 |
+| `vm-assets.env` | 번들할 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM) 릴리스(버전 · 주소 · sha256). VM 이미지 빌더는 그 저장소로 옮겼어요(GodseonDongle은 godseon 모드로 띄워요) |
+| `spike/` | USB/IP 실험 코드와 시험 결과 |
+| `legacy/utm/` | 먼저 만든 UTM + WireGuard 방식 |
+| `LICENSES/` | MIT(앱·도우미·실험·legacy) |
 
-주소는 VZ NAT 대역 말고 폰 인터넷용 호스트 링크 `10.94.8.0/30` 하나만 써요(맥 `10.94.8.2`, VM `10.94.8.1`). 맥의 다른 인터페이스가 이 대역을 쓰고 있으면 도우미가 폰 인터넷을 켜지 않고 오류로 알려요.
+## 개발용 VM 콘솔
 
-## 지금 상태 (2026-11-19)
+`defaults write io.github.afy0817.GodseonDongle DebugConsole -bool true`로 켜고 앱을 다시 시작하면, `~/Library/Application Support/GodseonDongle/console.in`에 쓴 줄이 VM의 root 콘솔에 입력돼요. 결과는 `~/Library/Logs/GodseonDongle/console.log`에 쌓여요. 끄려면 `defaults delete io.github.afy0817.GodseonDongle DebugConsole`을 실행하고 앱을 다시 시작해요.
+
+## 시험 기록 (2026-11-19)
 
 - **안드로이드 USB 테더링:** 실제 폰(갤럭시, RNDIS)으로 확인했어요.
   - 동글과 폰을 함께 VM에 붙여요(버스 1-1, 1-2). 동글 대역은 `wlan0`으로, 인터넷은 `usb0`으로 따로 가요.
@@ -133,26 +167,6 @@ xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
   - 거르기를 켠 뒤에는 VM으로 가는 받기 요청이 초당 약 715개에서 약 50개로 줄었고(도우미가 초당 350~430개를 걸러요), CPU는 도우미 약 10% → 5%, VM 약 20% → 6%가 됐어요. 연결과 맥 경로는 그대로 돌아요.
 - **알려진 점:** 동글이 한 번 이상한 상태가 돼 올리기가 1.6Mbit/s로 떨어졌어요. 다음에 다시 인식될 때는 USB Full Speed(12Mbit/s)로 잡혔고, 다시 꽂으니 풀렸어요. 지금은 느린 USB 모드면 앱이 경고해요.
 
-## 폴더
-
-| 폴더 | 내용 |
-|---|---|
-| `app/` | 맥 앱 (SwiftUI, Virtualization). `build_app.sh`로 번들을 만들어요. 아이콘은 `app/icon/make_icon.swift`로 그려요 |
-| `app/Resources/*.lproj` | 영어 문자열. 코드의 한국어 문자열이 키예요. `python3 app/tools/check_strings.py`로 빠진 번역을 찾아요 |
-| `helper/` | root 도우미 `godseon-dongled` (USB/IP 서버 + 맥 경로 + 폰 인터넷 + Trigger 프레임 거르기 + TSO 끄기), 설치·제거 스크립트 |
-| `vm-assets.env` | 번들할 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM) 릴리스(버전 · 주소 · sha256). VM 이미지 빌더는 그 저장소로 옮겼어요(GodseonDongle은 godseon 모드로 띄워요) |
-| `spike/` | USB/IP 실험 코드와 시험 결과 |
-| `legacy/utm/` | 먼저 만든 UTM + WireGuard 방식 |
-| `LICENSES/` | MIT(앱·도우미·실험·legacy) |
-
-## 개발용 VM 콘솔
-
-`defaults write io.github.afy0817.GodseonDongle DebugConsole -bool true`로 켜고 앱을 다시 시작하면, `~/Library/Application Support/GodseonDongle/console.in`에 쓴 줄이 VM의 root 콘솔에 입력돼요. 결과는 `~/Library/Logs/GodseonDongle/console.log`에 쌓여요. 끄려면 `defaults delete io.github.afy0817.GodseonDongle DebugConsole`을 실행하고 앱을 다시 시작해요.
-
-## 지우기
-
-설정의 **도우미 제거**를 누르거나 `sudo sh helper/uninstall.sh`를 실행한 뒤 앱을 지워요. 저장한 Wi-Fi 비밀번호는 키체인에 "GodseonDongle: 네트워크 이름" 항목으로 남아 있어요.
-
 ## 라이선스
 
 이 저장소의 파일은 모두 MIT([LICENSE](LICENSE))예요. 파일마다 SPDX 머리말이 있고, 머리말을 넣기 어려운 파일(README, 아이콘, 문자열, entitlements 등)은 [REUSE.toml](REUSE.toml)에 적어 뒀어요. 기여할 때 지킬 점은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있어요.
@@ -161,4 +175,4 @@ xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
 
 - VM 이미지 빌더와 게스트 스크립트는 GPL-2.0-or-later예요. Afcoo의 [ThruRNDIS_VM_Assets](https://github.com/Afcoo/ThruRNDIS_VM_Assets)에서 시작했어요.
 - 이미지 안의 리눅스 커널, BusyBox, Alpine 패키지, Wi-Fi 펌웨어는 각자의 라이선스(GPL, LGPL, BSD, MIT, 펌웨어 제조사의 재배포 조건 등)를 따라요. 구성요소 목록과 라이선스 원문은 앱 번들의 `vm_assets/compliance/`(`THIRD_PARTY_NOTICES.md`, `licenses/`, `SOURCE.md`)에 있어요.
-- 태그로 만드는 릴리스에는 앱 zip과 함께 이 구성요소들의 대응 소스 `vm_assets-sources.tar.gz`가 붙어요.
+- v0.3.0부터 릴리스마다 앱 zip과 함께 이 구성요소들의 대응 소스 `vm_assets-sources.tar.gz`가 붙어요.
