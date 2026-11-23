@@ -14,7 +14,12 @@ struct GodseonDongleApp: App {
         }
         .defaultSize(width: 900, height: 640)
         .windowResizability(.contentMinSize)
-        .commands { CommandGroup(replacing: .newItem) {} }
+        .commands {
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appInfo) {
+                Button(t("GodseonDongle 정보")) { AppInfo.showAboutPanel() }
+            }
+        }
 
         // The menu bar keeps only an icon; everything else lives in the window.
         MenuBarExtra {
@@ -64,6 +69,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Notification.Name {
     static let openMainWindow = Notification.Name("GodseonDongleOpenMainWindow")
+}
+
+extension AppInfo {
+    /// The standard About panel, with the commit as the build and the VM image under the icon.
+    @MainActor static func showAboutPanel() {
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [.version: commit ?? ""]
+        if let image = vmImageText {
+            let centered = NSMutableParagraphStyle()
+            centered.alignment = .center
+            options[.credits] = NSAttributedString(string: "\(t("VM 이미지")): \(image)", attributes: [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: centered,
+            ])
+        }
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(options: options)
+    }
 }
 
 /// The menu bar label lives as long as the app, so it is the view that can open the window

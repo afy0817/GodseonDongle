@@ -21,6 +21,7 @@
 "6 GHz · 채널 %@" = "6 GHz · channel %@";
 "DNS는 IPv4 주소 3개까지, 쉼표로 나눠 적어 주세요." = "DNS takes up to 3 IPv4 addresses, separated by commas.";
 "GodseonDongle 열기" = "Open GodseonDongle";
+"GodseonDongle 정보" = "About GodseonDongle";
 "GodseonDongle 진단 정보 %@\n" = "GodseonDongle diagnostics %@\n";
 "IP 주소" = "IP address";
 "IP 주소는 192.168.50.20 같은 형식이어야 하고, 대역의 첫 주소와 끝 주소는 쓸 수 없어요." = "Enter an IP address like 192.168.50.20. The first and last addresses of the subnet can’t be used.";
@@ -47,6 +48,7 @@
 "VM 멈춤" = "VM failed";
 "VM 시작 중" = "VM starting";
 "VM 오류: %@" = "VM error: %@";
+"VM 이미지" = "VM Image";
 "VM 진단 정보" = "VM Diagnostics";
 "VM 콘솔 로그" = "VM Console Log";
 "VM에 동글이 아직 붙지 않았어요." = "The dongle isn’t attached to the VM yet.";
@@ -124,6 +126,7 @@
 "동글이 느린 USB 모드(%@, 12Mbit/s)로 붙어 있어요. 동글을 뽑았다가 다시 꽂아 주세요." = "The dongle is connected in slow USB mode (%@, 12 Mbit/s). Unplug it and plug it back in.";
 "로그인 항목을 바꾸지 못했어요: %@" = "Couldn’t change the login item: %@";
 "로그인할 때 열기" = "Open at login";
+"리눅스 %@" = "Linux %@";
 "맥 경로" = "Mac Routes";
 "맥 경로 %@개" = "Mac routes: %@";
 "맥 경로 %@개 · 충돌 %@개" = "Mac routes: %@ · conflicts: %@";
@@ -141,6 +144,7 @@
 "바로 바뀌어요. 앱 메뉴처럼 macOS가 그리는 메뉴는 앱을 다시 열면 바뀌어요." = "Applies right away. Menus that macOS draws itself, like the app menu, follow once the app is reopened.";
 "받기 %.1f · 보내기 %.1f Mbit/s" = "Down %.1f · up %.1f Mbit/s";
 "받는 중" = "getting one…";
+"버전" = "Version";
 "보낼 대역이 없어요." = "No subnets to route.";
 "보안" = "Secured";
 "보이지 않음" = "Not in range";
@@ -222,6 +226,7 @@
 "저장된 비밀번호 사용 (바꾸려면 입력)" = "Using the saved password (type to change it)";
 "저장된 비밀번호가 없어요." = "No saved password.";
 "저장됨" = "Saved";
+"정보" = "About";
 "종료" = "Quit";
 "주변 Wi-Fi 6 공유기가 보내는 Trigger 프레임은 이 동글이 쓰지 못하는데도 USB로 계속 올라와요. 도우미가 VM에 넘기지 않고 걸러서 CPU를 덜 써요." = "Nearby Wi-Fi 6 access points send Trigger frames this dongle has no use for, yet it passes every one up over USB. The helper drops them instead of handing them to the VM, which saves CPU.";
 "주변 네트워크" = "Nearby Networks";

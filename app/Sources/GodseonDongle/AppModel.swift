@@ -663,6 +663,7 @@ final class AppModel: ObservableObject {
         do {
             let report = try await api.diagnostics()
             var text = t("GodseonDongle 진단 정보 \(Date().formatted(date: .numeric, time: .standard))\n")
+            text += "== app\n" + AppInfo.report
             if let data = FileManager.default.contents(atPath: Helper.statusPath) {
                 text += "== helper status\n" + String(decoding: data, as: UTF8.self) + "\n"
             }

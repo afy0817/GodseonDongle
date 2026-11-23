@@ -83,6 +83,15 @@ struct SettingsView: View {
                 } header: {
                     Text(t("도우미"))
                 }
+
+                Section {
+                    LabeledContent(t("버전")) { Text(AppInfo.versionText).textSelection(.enabled) }
+                    if let image = AppInfo.vmImageText {
+                        LabeledContent(t("VM 이미지")) { Text(image).textSelection(.enabled) }
+                    }
+                } header: {
+                    Text(t("정보"))
+                }
             }
             .formStyle(.grouped)
 

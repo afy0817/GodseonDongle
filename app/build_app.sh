@@ -26,7 +26,20 @@ ROOT=$(CDPATH='' cd -- "$APP_DIR/.." && pwd)
 DIST=$ROOT/dist
 ASSETS=$DIST/vm_assets
 BUNDLE=$DIST/GodseonDongle.app
-VERSION=${GODSEON_VERSION:-0.1.0}
+# The version the app shows: GODSEON_VERSION (the workflow passes the tag's), else the nearest v*
+# tag HEAD descends from. The commit goes into Info.plist too, with -dirty for uncommitted changes.
+if [ -z "${GODSEON_VERSION:-}" ]; then
+    GODSEON_VERSION=$(git -C "$ROOT" describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null | sed 's/^v//' || true)
+fi
+VERSION=${GODSEON_VERSION:-0.0.0}
+COMMIT=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || true)
+if [ -n "$COMMIT" ] && ! git -C "$ROOT" diff --quiet HEAD --; then
+    COMMIT=$COMMIT-dirty
+fi
+COMMIT_KEY=""
+if [ -n "$COMMIT" ]; then
+    COMMIT_KEY="<key>GodseonCommit</key><string>$COMMIT</string>"
+fi
 
 # shellcheck source=../vm-assets.env
 . "$ROOT/vm-assets.env"
@@ -102,6 +115,7 @@ cat >"$BUNDLE/Contents/Info.plist" <<EOF
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
+    $COMMIT_KEY
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 GodSeon. MIT License. The bundled Linux VM image comes with its own licenses: Contents/Resources/vm_assets/compliance.</string>

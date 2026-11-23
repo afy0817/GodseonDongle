@@ -6,3 +6,5 @@ spike/vzrun/vzrun
 .DS_Store
 __pycache__/
 *.pyc
+.claude/*
+!.claude/settings.json

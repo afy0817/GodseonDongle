@@ -100,6 +100,8 @@ macOS 14 이상과 Xcode(SwiftUI 매크로 때문)가 필요해요. VM 이미지
 
 결과물은 `dist/GodseonDongle.app`(약 59MB)이고, `--install`을 붙이면 `/Applications`에 복사해요.
 
+앱 버전은 HEAD가 이어받은 가장 가까운 `v` 태그에서 와요(`GODSEON_VERSION`으로 바꿀 수 있어요). 커밋도 함께 들어가고, 커밋하지 않은 변경이 있으면 `-dirty`가 붙어요. 앱에서는 **설정 → 정보**와 앱 메뉴의 **GodseonDongle 정보**에서 버전, 커밋, VM 이미지 버전을 볼 수 있어요.
+
 VM 이미지를 직접 만들어 넣으려면 GodseonDongle-VM에서 `./build.sh`를 돌린 뒤 그 폴더를 가리켜요.
 
 ```bash
