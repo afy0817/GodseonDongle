@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: 2026 GodSeon
 // SPDX-License-Identifier: MIT
 //
 // usbipd: export one host USB device to a Linux guest over USB/IP, using Apple's

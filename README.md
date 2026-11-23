@@ -42,11 +42,11 @@ godseon-dongled  (root 도우미, launchd)
 - **송신 멈춤 대비:** 동글로 보내는 요청이 6초 넘게 멈추면 도우미가 먼저 그 통로를 비워요. 그래도 안 풀리면 동글을 재설정하고, VM이 약 15초 뒤 다시 붙어요.
 - **앱을 끄면:** 동글과 폰을 macOS에 돌려주고 맥 경로와 폰 인터넷을 지워요. 창만 닫으면 상단바 아이콘으로 계속 돌아가요.
 
-동글은 VM 안의 리눅스 드라이버가 맡아요. 넣어 둔 드라이버는 [vm/drivers.conf](vm/drivers.conf)에 있어요(rtw88, rtw89, mt76, rtl8xxxu, rt2800usb, ath9k_htc 등). 실제로 시험한 동글은 RTL8812BU(`0bda:b812`)예요.
+동글은 VM 안의 리눅스 드라이버가 맡아요. 넣어 둔 드라이버는 [GodseonDongle-VM의 drivers.conf](https://github.com/afy0817/GodseonDongle-VM/blob/main/drivers.conf)에 있어요(rtw88, rtw89, mt76, rtl8xxxu, rt2800usb, ath9k_htc 등). 실제로 시험한 동글은 RTL8812BU(`0bda:b812`)예요.
 
 ## 빌드
 
-macOS 14 이상, Xcode(SwiftUI 매크로 때문), Docker(VM 이미지를 처음 만들 때)가 필요해요.
+macOS 14 이상과 Xcode(SwiftUI 매크로 때문)가 필요해요. VM 이미지는 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM)(ThruRNDIS-Wi-Fi와 같이 쓰는 이미지)의 릴리스를 받아 넣어서 Docker는 필요 없어요. 어느 릴리스를 쓸지는 [vm-assets.env](vm-assets.env)에 버전과 sha256으로 적혀 있어요.
 
 ```bash
 ./app/build_app.sh
@@ -56,15 +56,15 @@ macOS 14 이상, Xcode(SwiftUI 매크로 때문), Docker(VM 이미지를 처음 
 ./app/build_app.sh --install
 ```
 
-`vm/`이 바뀌면 `build_app.sh`가 `dist/vm_assets/manifest.json`에 남은 해시로 알아채고 VM 이미지를 다시 만들어요(`GODSEON_REBUILD_VM=0`이면 그대로 둬요). 언제나 다시 만들려면:
+VM 이미지를 직접 만들어 넣으려면 GodseonDongle-VM에서 `./build.sh`를 돌린 뒤 그 폴더를 가리켜요.
 
 ```bash
-GODSEON_REBUILD_VM=1 ./app/build_app.sh
+VM_ASSETS_DIR=../GodseonDongle-VM/dist/vm_assets ./app/build_app.sh
 ```
 
 결과물은 `dist/GodseonDongle.app`(약 58MB)이고, `--install`을 붙이면 `/Applications`에 복사해요.
 
-GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))도 같은 앱을 빌드해요. VM 이미지는 리눅스 arm64 러너의 Docker에서, 앱은 맥 러너에서 만들고, 실행마다 zip을 아티팩트로 남겨요. `v`로 시작하는 태그(예: `v0.1.0`)를 올리면 Release에 zip이 붙어요. 내려받은 앱은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. Finder에서 오른쪽 클릭 → **열기**를 누르거나 아래 명령을 실행해요.
+GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))도 같은 앱을 맥 러너에서 빌드하고, 실행마다 zip을 아티팩트로 남겨요. `v`로 시작하는 태그(예: `v0.1.0`)를 올리면 Release에 앱 zip과, 앱에 든 VM 이미지의 대응 소스 `vm_assets-sources.tar.gz`가 함께 붙어요(`./app/build_app.sh --release`가 받아 와요). 내려받은 앱은 ad-hoc 서명이라 처음 열 때 macOS가 막아요. Finder에서 오른쪽 클릭 → **열기**를 누르거나 아래 명령을 실행해요.
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
@@ -128,7 +128,7 @@ xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
   - 앱을 끄면 1초 안에 동글을 돌려주고 경로를 지웠어요.
 - **메모리:** 앱 55MB + 도우미 10MB + VM 약 280MB예요.
 - **CPU (쉴 때):** 앱 2% + 도우미 6~10% + VM 14~21%였어요. 앱의 상태 폴링과 VM 안 감시 스크립트는 처음보다 줄였어요.
-  - 남은 대부분은 동글이 받는 프레임 수에 비례해요. 쉴 때도 USB 받기 요청이 초당 600~700개였는데, 재 보니 그중 약 90%가 주변 Wi-Fi 6 공유기가 보내는 Trigger 프레임이었어요. 802.11ac 동글은 쓰지 못하는 프레임인데, 칩의 수신 필터를 바꿔도 걸러지지 않았어요([vm/kernel/README.md](vm/kernel/README.md)).
+  - 남은 대부분은 동글이 받는 프레임 수에 비례해요. 쉴 때도 USB 받기 요청이 초당 600~700개였는데, 재 보니 그중 약 90%가 주변 Wi-Fi 6 공유기가 보내는 Trigger 프레임이었어요. 802.11ac 동글은 쓰지 못하는 프레임인데, 칩의 수신 필터를 바꿔도 걸러지지 않았어요([GodseonDongle-VM의 kernel/README.md](https://github.com/afy0817/GodseonDongle-VM/blob/main/kernel/README.md)).
   - 그래서 도우미가 rtw88 동글(RTL8812BU·8822BU·8811CU·8821CU·8812CU·8822CU)의 받기 응답을 보고, Trigger 프레임만 든 응답은 VM에 넘기지 않고 그 요청을 동글에 다시 걸어요. 동글 설정의 **Wi-Fi 6 Trigger 프레임 거르기**로 끌 수 있어요.
   - 거르기를 켠 뒤에는 VM으로 가는 받기 요청이 초당 약 715개에서 약 50개로 줄었고(도우미가 초당 350~430개를 걸러요), CPU는 도우미 약 10% → 5%, VM 약 20% → 6%가 됐어요. 연결과 맥 경로는 그대로 돌아요.
 - **알려진 점:** 동글이 한 번 이상한 상태가 돼 올리기가 1.6Mbit/s로 떨어졌어요. 다음에 다시 인식될 때는 USB Full Speed(12Mbit/s)로 잡혔고, 다시 꽂으니 풀렸어요. 지금은 느린 USB 모드면 앱이 경고해요.
@@ -140,10 +140,10 @@ xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
 | `app/` | 맥 앱 (SwiftUI, Virtualization). `build_app.sh`로 번들을 만들어요. 아이콘은 `app/icon/make_icon.swift`로 그려요 |
 | `app/Resources/*.lproj` | 영어 문자열. 코드의 한국어 문자열이 키예요. `python3 app/tools/check_strings.py`로 빠진 번역을 찾아요 |
 | `helper/` | root 도우미 `godseon-dongled` (USB/IP 서버 + 맥 경로 + 폰 인터넷 + Trigger 프레임 거르기 + TSO 끄기), 설치·제거 스크립트 |
-| `vm/` | VM 이미지 빌더. ThruRNDIS-Wi-Fi에서 가져와 USB/IP를 더했어요. `vm/kernel/`에 rtw88 패치를 넣어 다시 빌드할 수 있어요 |
+| `vm-assets.env` | 번들할 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM) 릴리스(버전 · 주소 · sha256). VM 이미지 빌더는 그 저장소로 옮겼어요(GodseonDongle은 godseon 모드로 띄워요) |
 | `spike/` | USB/IP 실험 코드와 시험 결과 |
 | `legacy/utm/` | 먼저 만든 UTM + WireGuard 방식 |
-| `LICENSES/` | MIT(앱·도우미·실험·legacy), GPL-2.0-or-later(VM 이미지 빌더) |
+| `LICENSES/` | MIT(앱·도우미·실험·legacy) |
 
 ## 개발용 VM 콘솔
 
@@ -155,4 +155,10 @@ xattr -dr com.apple.quarantine /Applications/GodseonDongle.app
 
 ## 라이선스
 
-파일마다 SPDX 머리말이 있어요. 앱(`app/`), 도우미(`helper/`), `spike/`, `legacy/`는 MIT([LICENSE](LICENSE))이고, ThruRNDIS-Wi-Fi에서 가져온 VM 이미지 빌더(`vm/`)는 GPL-2.0-or-later예요. 라이선스 원문은 [LICENSES/](LICENSES/)에 있어요.
+이 저장소의 파일은 모두 MIT([LICENSE](LICENSE))예요. 파일마다 SPDX 머리말이 있고, 머리말을 넣기 어려운 파일(README, 아이콘, 문자열, entitlements 등)은 [REUSE.toml](REUSE.toml)에 적어 뒀어요. 기여할 때 지킬 점은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있어요.
+
+앱 번들에 든 VM 이미지(`Contents/Resources/vm_assets`)는 [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM)의 릴리스이고, 라이선스가 따로예요. 앱과 VM 이미지는 서로 다른 프로그램이라, 한 번들에 같이 들어 있어도 앱은 MIT 그대로예요.
+
+- VM 이미지 빌더와 게스트 스크립트는 GPL-2.0-or-later예요. Afcoo의 [ThruRNDIS_VM_Assets](https://github.com/Afcoo/ThruRNDIS_VM_Assets)에서 시작했어요.
+- 이미지 안의 리눅스 커널, BusyBox, Alpine 패키지, Wi-Fi 펌웨어는 각자의 라이선스(GPL, LGPL, BSD, MIT, 펌웨어 제조사의 재배포 조건 등)를 따라요. 구성요소 목록과 라이선스 원문은 앱 번들의 `vm_assets/compliance/`(`THIRD_PARTY_NOTICES.md`, `licenses/`, `SOURCE.md`)에 있어요.
+- 태그로 만드는 릴리스에는 앱 zip과 함께 이 구성요소들의 대응 소스 `vm_assets-sources.tar.gz`가 붙어요.

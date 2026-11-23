@@ -13,7 +13,7 @@ VM: vhci_hcd + usbip attach → rtw88 드라이버 → wlan0 ◀─┘ → Wi-Fi
 | `usbipd/usbipd.m` | 맥 쪽 USB/IP 서버 (Objective-C, IOUSBHost). 제어·벌크·인터럽트 전송, 요청 취소(unlink), 10초 통계 |
 | `vzrun/vzrun.swift` | Virtualization.framework로 VM 띄우기. 콘솔 입력은 FIFO |
 | `connect.sh` | VM API로 Wi-Fi 연결. 비밀번호는 맥에서 PSK로 바꿔서 보내요 |
-| `../vm/` | VM 이미지 빌더. ThruRNDIS-Wi-Fi에서 가져와 `vhci_hcd`, `linux-tools-usbip`, `usbip-attach`를 더했어요 |
+| [GodseonDongle-VM](https://github.com/afy0817/GodseonDongle-VM) | VM 이미지 빌더(실험 당시 `../vm/`). ThruRNDIS-Wi-Fi에서 가져와 `vhci_hcd`, `linux-tools-usbip`, `usbip-attach`를 더했어요 |
 
 ## 1차: 동작 확인
 
@@ -62,8 +62,8 @@ VM: vhci_hcd + usbip attach → rtw88 드라이버 → wlan0 ◀─┘ → Wi-Fi
 이 실험은 동글을 다른 VM(UTM 등)에서 뺀 뒤에 해요.
 
 ```bash
-# 1) VM 이미지 (Docker 필요)
-THRURNDIS_WIFI_VERSION=godseon-spike sh vm/build.sh "$PWD/dist/vm_assets"
+# 1) VM 이미지: GodseonDongle-VM 릴리스의 vm_assets.zip 을 dist/ 에 풀거나, 그 저장소에서 ./build.sh (Docker 필요)
+ditto -x -k vm_assets.zip dist
 # 2) 빌드
 clang -fobjc-arc -O2 spike/usbipd/usbipd.m -o spike/usbipd/usbipd -framework Foundation -framework IOKit -framework IOUSBHost
 swiftc -O spike/vzrun/vzrun.swift -o spike/vzrun/vzrun && codesign -s - -f --entitlements spike/vzrun/vzrun.entitlements spike/vzrun/vzrun

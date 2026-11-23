@@ -52,6 +52,9 @@ final class GuestVM: NSObject {
         bootLoader.initialRamdiskURL = assets.appendingPathComponent("initramfs-thrurndis-wifi")
         bootLoader.commandLine = [
             "console=hvc0", "rdinit=/sbin/init", "modules=virtio_pci,virtio_mmio,virtio_console",
+            // GodseonDongle-VM also runs under ThruRNDIS (ThruRNDIS-Wi-Fi); godseon mode is this
+            // app's layout: USB/IP, host link 10.94.8.0/30, control API on eth0:9408.
+            "thrurndis-wifi.mode=godseon",
             "godseon.usbip=gw/\(Helper.wifiBusID)", "godseon.usbip2=gw/\(Helper.tetherBusID)",
             "thrurndis-wifi.token=\(token)", "thrurndis-wifi.country=\(country)",
         ].joined(separator: " ")

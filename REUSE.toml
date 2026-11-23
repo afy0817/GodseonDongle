@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 GodSeon
+# SPDX-License-Identifier: MIT
+#
+# Files that cannot carry an SPDX header, or are better left without one
+# (https://reuse.software). Every other file has the header itself.
+
+version = 1
+
+[[annotations]]
+path = [
+  ".gitignore",
+  "README.md",
+  "CONTRIBUTING.md",
+  "legacy/utm/README.md",
+  "spike/README.md",
+  "app/GodseonDongle.entitlements",
+  "spike/vzrun/vzrun.entitlements",
+  "app/Resources/en.lproj/GodseonDongle.strings",
+  "app/Resources/ko.lproj/InfoPlist.strings",
+  "app/Resources/AppIcon.icns",
+  "app/icon/AppIcon-1024.png",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 GodSeon"
+SPDX-License-Identifier = "MIT"

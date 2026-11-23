@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: 2026 GodSeon
 // SPDX-License-Identifier: MIT
 //
 // vzrun (spike): boot the GodseonDongle guest with Virtualization.framework - no UTM,

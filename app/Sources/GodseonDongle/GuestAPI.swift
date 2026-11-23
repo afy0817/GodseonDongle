@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Client for the guest's busybox httpd control API (vm/initramfs/api.cgi).
+/// Client for the guest's busybox httpd control API (initramfs/api.cgi in GodseonDongle-VM).
 struct GuestAPI {
     let host: String
     let token: String

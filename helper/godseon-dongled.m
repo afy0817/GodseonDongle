@@ -76,7 +76,8 @@ static const double kStallSeconds = 6;           // a bulk OUT request waiting t
 static const double kResetSpacingSeconds = 120;  // at most one forced dongle reset per this long
 static const double kSummarySeconds = 300;       // traffic summary in the log while the VM is connected
 // The phone's internet: the Mac's end of the host link (an alias on the VM's vmnet bridge), the
-// guest's end (on its eth0, vm/initramfs/init-network) and the network service published for it.
+// guest's end (on its eth0, initramfs/init-network in GodseonDongle-VM) and the network service
+// published for it.
 static NSString *const kHostLinkMac = @"10.94.8.2";
 static NSString *const kHostLinkGuest = @"10.94.8.1";
 static NSString *const kHostLinkMask = @"255.255.255.252";

@@ -1,2 +1,3 @@
 /* The app's own strings are written in Korean in the source; this file only covers Info.plist. */
 "NSLocalNetworkUsageDescription" = "앱이 띄운 VM 안의 Wi-Fi 제어 API에 접속해요.";
+"NSHumanReadableCopyright" = "Copyright © 2026 GodSeon. MIT 라이선스. 함께 든 리눅스 VM 이미지의 라이선스는 Contents/Resources/vm_assets/compliance에 있어요.";

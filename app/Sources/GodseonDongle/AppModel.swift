@@ -50,7 +50,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     static let defaultDongle = "0bda:b812"
-    /// The phone's host link on the VM's bridge (helper/godseon-dongled.m, vm/initramfs/init-network).
+    /// The phone's host link on the VM's bridge (helper/godseon-dongled.m, GodseonDongle-VM's
+    /// initramfs/init-network).
     static let hostLink = "10.94.8.0/30"
     private let vm = GuestVM()
     /// New for every boot: the guest takes it from the kernel command line.

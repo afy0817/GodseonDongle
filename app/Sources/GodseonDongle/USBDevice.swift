@@ -74,7 +74,7 @@ enum USBDevice {
     ]
 
     /// Every USB ID a Wi-Fi driver in the VM claims, from the image's manifest (written by
-    /// vm/builder/build_assets.py). An image from before the list falls back to rtw88IDs.
+    /// builder/build_assets.py in GodseonDongle-VM). An image from before the list falls back to rtw88IDs.
     static let wifiIDs: Set<String> = {
         guard let url = Bundle.main.url(forResource: "manifest", withExtension: "json", subdirectory: "vm_assets"),
               let data = try? Data(contentsOf: url),

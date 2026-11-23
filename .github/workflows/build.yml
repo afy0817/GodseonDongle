@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2026 GodSeon
 # SPDX-License-Identifier: MIT
 #
-# Builds GodseonDongle.app in two steps: the VM image on an arm64 Linux runner (it is built
-# with Docker, which macOS runners cannot run), then the app and the root helper on a macOS
-# runner (Xcode). Every run keeps the zipped app as an artifact; a v* tag also publishes it
-# as a GitHub release. The app is ad-hoc signed, as with a local build.
+# Builds GodseonDongle.app and its root helper on a macOS runner (Xcode). The VM image is the
+# GodseonDongle-VM release pinned in vm-assets.env, which build_app.sh downloads and checks.
+# Every run keeps the zipped app as an artifact; a v* tag also publishes it as a GitHub release
+# together with the VM image's corresponding source (vm_assets-sources.tar.gz, the same file as
+# in the GodseonDongle-VM release), since the app zip carries the image's GPL binaries. The app
+# is ad-hoc signed, as with a local build.
 name: build
 
 on:
@@ -22,43 +24,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  vm:
-    name: VM image (Linux arm64)
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build the VM image
-        run: THRURNDIS_WIFI_VERSION="godseon-${GITHUB_SHA::7}" sh vm/build.sh dist/vm_assets
-      - uses: actions/upload-artifact@v7
-        with:
-          name: vm_assets
-          path: dist/vm_assets
-          if-no-files-found: error
-          retention-days: 7
-
   app:
     name: App (macOS)
-    needs: vm
     runs-on: macos-26
     timeout-minutes: 30
     permissions:
       contents: write   # gh release create, on tags only
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: vm_assets
-          path: dist/vm_assets
       - name: Check the English strings
         run: python3 app/tools/check_strings.py
       - name: Build the app
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then version=${GITHUB_REF_NAME#v}; else version=0.1.0; fi
           echo "VERSION=$version" >>"$GITHUB_ENV"
-          # dist/vm_assets comes from the vm job of this very commit; GODSEON_REBUILD_VM=0 keeps
-          # build_app.sh from ever reaching for Docker, which macOS runners lack
-          GODSEON_REBUILD_VM=0 GODSEON_VERSION=$version ./app/build_app.sh
+          # --release also fetches the VM image's source archive (262 MB) for the release: tags only
+          release=""; if [ "$GITHUB_REF_TYPE" = tag ]; then release=--release; fi
+          GODSEON_VERSION=$version ./app/build_app.sh $release
       - name: Zip the app
         run: |
           name=GodseonDongle-$VERSION
@@ -74,4 +56,6 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "GodseonDongle $VERSION" --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" dist/vm_assets-sources.tar.gz \
+            --title "GodseonDongle $VERSION" --generate-notes

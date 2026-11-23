@@ -5,8 +5,12 @@
 # Builds dist/GodseonDongle.app: the app, its VM image and its root helper, ad-hoc signed
 # with the virtualization entitlement only (no Apple developer account needed).
 #   ./app/build_app.sh [--install]     --install copies it to /Applications
-# The VM image (dist/vm_assets) is built with Docker the first time, again when vm/ no longer
-# matches the hash its manifest keeps, or always with GODSEON_REBUILD_VM=1 (=0 keeps it).
+#   ./app/build_app.sh --release       also fetches the VM image's corresponding source,
+#                                      dist/vm_assets-sources.tar.gz, for the GitHub release
+# The VM image is a GodseonDongle-VM release, pinned in vm-assets.env: vm_assets.zip is
+# downloaded once into dist/cache and checked against its sha256. To bundle a local build
+# instead (after ./build.sh in a GodseonDongle-VM checkout):
+#   VM_ASSETS_DIR=../GodseonDongle-VM/dist/vm_assets ./app/build_app.sh
 
 set -eu
 
@@ -24,32 +28,59 @@ ASSETS=$DIST/vm_assets
 BUNDLE=$DIST/GodseonDongle.app
 VERSION=${GODSEON_VERSION:-0.1.0}
 
-REBUILD_VM=${GODSEON_REBUILD_VM:-}
-if [ -z "$REBUILD_VM" ] && [ -f "$ASSETS/manifest.json" ]; then
-    # The app and the VM scripts change together (kernel command line, control API).
-    WANT=$(sh "$ROOT/vm/build.sh" --sources-hash)
-    HAVE=$(plutil -extract sources raw -o - "$ASSETS/manifest.json" 2>/dev/null || true)
-    if [ "$WANT" != "$HAVE" ]; then
-        echo "dist/vm_assets comes from other vm/ sources (${HAVE:-unknown}, now $WANT); rebuilding it." \
-            "GODSEON_REBUILD_VM=0 keeps it." >&2
-        REBUILD_VM=1
+# shellcheck source=../vm-assets.env
+. "$ROOT/vm-assets.env"
+sha256() { shasum -a 256 "$1" | cut -d ' ' -f 1; }
+# fetch <url> <sha256> <file>: downloads into <file> unless it is there with that sha256
+fetch() {
+    if [ -f "$3" ] && [ "$(sha256 "$3")" = "$2" ]; then
+        return 0
     fi
+    mkdir -p "$(dirname "$3")"
+    echo "downloading $1"
+    curl -fL --retry 3 -o "$3.part" "$1"
+    if [ "$(sha256 "$3.part")" != "$2" ]; then
+        echo "$1 does not match its sha256 in vm-assets.env" >&2
+        rm -f "$3.part"
+        exit 1
+    fi
+    mv "$3.part" "$3"
+}
+if [ "${1:-}" = --release ] && [ -n "${VM_ASSETS_DIR:-}" ]; then
+    echo "--release bundles the pinned GodseonDongle-VM release; unset VM_ASSETS_DIR" >&2
+    exit 1
 fi
-if [ ! -f "$ASSETS/initramfs-thrurndis-wifi" ] || [ "$REBUILD_VM" = 1 ]; then
-    THRURNDIS_WIFI_VERSION="godseon-$VERSION" sh "$ROOT/vm/build.sh" "$ASSETS"
+if [ -n "${VM_ASSETS_DIR:-}" ]; then
+    ASSETS=$(CDPATH='' cd -- "$VM_ASSETS_DIR" && pwd)
+else
+    fetch "$VM_ASSETS_URL" "$VM_ASSETS_SHA256" "$DIST/cache/vm_assets-$VM_ASSETS_VERSION.zip"
+    rm -rf "$ASSETS"
+    ditto -x -k "$DIST/cache/vm_assets-$VM_ASSETS_VERSION.zip" "$DIST"
+fi
+if [ ! -f "$ASSETS/initramfs-thrurndis-wifi" ] || [ ! -f "$ASSETS/manifest.json" ]; then
+    echo "$ASSETS is not a GodseonDongle-VM image" >&2
+    exit 1
+fi
+if [ ! -f "$ASSETS/compliance/SOURCE.md" ]; then
+    echo "warning: $ASSETS has no license notices (a ./build.sh --quick image); do not distribute this app" >&2
+fi
+if [ "${1:-}" = --release ]; then
+    # The app zip ships the GPL binaries of the VM image, so its release also carries their
+    # source: the same file as the GodseonDongle-VM release (vm_assets/compliance/SOURCE.md).
+    fetch "$VM_SOURCES_URL" "$VM_SOURCES_SHA256" "$DIST/vm_assets-sources.tar.gz"
 fi
 
 swift build --package-path "$APP_DIR" -c release
 BINARY=$(swift build --package-path "$APP_DIR" -c release --show-bin-path)/GodseonDongle
 
 rm -rf "$BUNDLE"
-mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/helper" "$BUNDLE/Contents/Resources/vm_assets"
+mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/helper"
 cp "$BINARY" "$BUNDLE/Contents/MacOS/GodseonDongle"
 cp "$APP_DIR/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"   # swift app/icon/make_icon.swift
 cp -R "$APP_DIR/Resources/en.lproj" "$APP_DIR/Resources/ko.lproj" "$BUNDLE/Contents/Resources/"
-for file in Image-lts initramfs-thrurndis-wifi manifest.json SHA256SUMS; do
-    cp "$ASSETS/$file" "$BUNDLE/Contents/Resources/vm_assets/"
-done
+cp "$ROOT/LICENSE" "$BUNDLE/Contents/Resources/LICENSE"   # the app's own license (MIT)
+# The whole folder: compliance/ holds the license notices of what is in the image.
+cp -R "$ASSETS" "$BUNDLE/Contents/Resources/vm_assets"
 clang -fobjc-arc -O2 -Wall -mmacosx-version-min=14.0 -o "$BUNDLE/Contents/Resources/helper/godseon-dongled" \
     "$ROOT/helper/godseon-dongled.m" -framework Foundation -framework IOKit -framework IOUSBHost \
     -framework SystemConfiguration
@@ -73,7 +104,7 @@ cat >"$BUNDLE/Contents/Info.plist" <<EOF
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
-    <key>NSHumanReadableCopyright</key><string>MIT / GPL-2.0-or-later (VM scripts)</string>
+    <key>NSHumanReadableCopyright</key><string>Copyright © 2026 GodSeon. MIT License. The bundled Linux VM image comes with its own licenses: Contents/Resources/vm_assets/compliance.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Connects to the Wi-Fi control API inside the VM the app starts.</string>
     <key>NSAppTransportSecurity</key>
