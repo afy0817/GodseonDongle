@@ -110,7 +110,7 @@ VM_ASSETS_DIR=../GodseonDongle-VM/dist/vm_assets ./app/build_app.sh
 
 ### 릴리스
 
-GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))는 `v`로 시작하는 태그를 올릴 때만 돌아요. main에 push하거나 풀 리퀘스트를 열 때는 돌지 않아요. 태그를 올리면 맥 러너에서 앱을 빌드하고, 그 태그의 Release에 앱 zip과 앱에 든 VM 이미지의 대응 소스 `vm_assets-sources.tar.gz`를 올려요(`./app/build_app.sh --release`가 받아 와요).
+GitHub Actions([.github/workflows/build.yml](.github/workflows/build.yml))는 `v`로 시작하는 태그를 올릴 때만 돌아요. main에 push하거나 풀 리퀘스트를 열 때는 돌지 않아요. 태그를 올리면 맥 러너에서 앱을 빌드하고, 그 태그의 Release에 앱 zip과 앱에 든 VM 이미지의 대응 소스 `vm_assets-sources.tar.gz`를 올려요(`./app/build_app.sh --release`가 받아 와요). 같은 태그를 다시 올리거나 옮기면 이미 있는 Release는 그대로 두고, 올리는 단계만 건너뛰어요.
 
 ```bash
 git tag -a v0.3.0 -m "GodseonDongle 0.3.0"

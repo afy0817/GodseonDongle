@@ -6,7 +6,8 @@
 # image is the GodseonDongle-VM release pinned in vm-assets.env, which build_app.sh downloads and
 # checks. Since the app zip carries the image's GPL binaries, the release also gets the image's
 # corresponding source (vm_assets-sources.tar.gz, the same file as in the GodseonDongle-VM
-# release). The app is ad-hoc signed, as with a local build.
+# release). The app is ad-hoc signed, as with a local build. A release is never replaced: if the
+# tag's release already exists (the tag was pushed again or moved), publishing is skipped.
 name: build
 
 on:
@@ -46,5 +47,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::release $GITHUB_REF_NAME exists; releases are not replaced, skipping"
+            exit 0
+          fi
           gh release create "$GITHUB_REF_NAME" "$ZIP" dist/vm_assets-sources.tar.gz \
             --title "GodseonDongle $VERSION" --generate-notes
